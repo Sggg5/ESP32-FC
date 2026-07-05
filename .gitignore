@@ -17,6 +17,7 @@ build/
 /*.nes
 *.nes
 *.o
+/audio-monitor.*
 
 # SDL2 build
 /sd
