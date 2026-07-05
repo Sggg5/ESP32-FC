@@ -13,6 +13,8 @@
 #define RG_AUDIO_USE_INT_DAC        0   // 0 = Disable, 1 = GPIO25, 2 = GPIO26, 3 = Both
 #define RG_AUDIO_USE_EXT_DAC        1   // 0 = Disable, 1 = Enable
 #define RG_AUDIO_OUTPUT_GAIN        0.35f
+#define RG_LANG_DEFAULT             RG_LANG_ZH
+#define RG_FONT_DEFAULT             RG_FONT_ZH_MINI_12
 
 // Video
 #define RG_SCREEN_DRIVER            0   // 0 = ILI9341/ST7789
