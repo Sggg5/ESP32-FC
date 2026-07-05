@@ -118,7 +118,11 @@ void rg_gui_init(void)
     RG_LOGI("GUI init: clock...\n");
     gui.show_clock = rg_settings_get_boolean(NS_GLOBAL, SETTING_CLOCK, false);
     RG_LOGI("GUI init: language...\n");
+#ifdef RG_FORCE_DEFAULT_LANGUAGE
+    if (!rg_gui_set_language_id(RG_LANG_DEFAULT))
+#else
     if (!rg_gui_set_language_id(rg_settings_get_number(NS_GLOBAL, SETTING_LANGUAGE, RG_LANG_DEFAULT)))
+#endif
         rg_gui_set_language_id(0);
     RG_LOGI("GUI init: font...\n");
 #ifdef RG_FORCE_DEFAULT_FONT

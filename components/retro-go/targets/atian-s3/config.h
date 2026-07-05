@@ -13,8 +13,9 @@
 #define RG_AUDIO_USE_INT_DAC        0   // 0 = Disable, 1 = GPIO25, 2 = GPIO26, 3 = Both
 #define RG_AUDIO_USE_EXT_DAC        1   // 0 = Disable, 1 = Enable
 #define RG_AUDIO_OUTPUT_GAIN        0.35f
-#define RG_LANG_DEFAULT             RG_LANG_ZH
-#define RG_FONT_DEFAULT             RG_FONT_ZH_MINI_12
+#define RG_LANG_DEFAULT             RG_LANG_EN
+#define RG_FONT_DEFAULT             RG_FONT_VERA_11
+#define RG_FORCE_DEFAULT_LANGUAGE   1
 #define RG_FORCE_DEFAULT_FONT       1
 
 // Video
