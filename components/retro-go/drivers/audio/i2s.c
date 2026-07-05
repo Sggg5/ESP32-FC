@@ -30,6 +30,10 @@
 #define DMA_BUFFER_COUNT 4
 #define DMA_BUFFER_LEN 180
 
+#ifndef RG_AUDIO_OUTPUT_GAIN
+#define RG_AUDIO_OUTPUT_GAIN 1.0f
+#endif
+
 static struct {
     const char *last_error;
     int device;
@@ -205,7 +209,7 @@ static bool driver_deinit(void)
 
 static bool driver_submit(const rg_audio_frame_t *frames, size_t count)
 {
-    float volume = state.muted ? 0.f : (state.volume * 0.01f);
+    float volume = state.muted ? 0.f : (state.volume * 0.01f * RG_AUDIO_OUTPUT_GAIN);
     bool use_internal_dac = state.device == 0;
     rg_audio_frame_t buffer[DMA_BUFFER_LEN];
     size_t pos = 0;

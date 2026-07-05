@@ -99,6 +99,8 @@ Current state:
 
 - `RG_AUDIO_USE_EXT_DAC` is `1`.
 - The IDF 6 I2S driver path is enabled for the MAX98357A.
+- `RG_AUDIO_OUTPUT_GAIN` is `0.35f` to attenuate the MAX98357A output in
+  software before samples are sent to I2S.
 - A standalone `i2s-audio-test` app confirmed GPIO39/40/41 and the MAX98357A
   can play a 440 Hz test tone.
 
