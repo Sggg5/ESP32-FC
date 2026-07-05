@@ -97,9 +97,10 @@ MAX98357A wiring reserved in the target config:
 
 Current state:
 
-- `RG_AUDIO_USE_EXT_DAC` is `0`.
-- The IDF 6 I2S driver path has been ported, but external DAC output is disabled
-  because audio init previously stalled during hardware testing.
+- `RG_AUDIO_USE_EXT_DAC` is `1`.
+- The IDF 6 I2S driver path is enabled for the MAX98357A.
+- I2S writes use a short timeout so audio cannot stall the emulator loop for a
+  full second if the DMA queue backs up.
 
 ## Flash partition layout
 

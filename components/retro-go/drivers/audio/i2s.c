@@ -243,13 +243,15 @@ static bool driver_submit(const rg_audio_frame_t *frames, size_t count)
         buffer[pos].left = left;
         buffer[pos].right = right;
 
-        if (i == count - 1 || ++pos == RG_COUNT(buffer))
+        pos++;
+
+        if (i == count - 1 || pos == RG_COUNT(buffer))
         {
             size_t written;
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(6, 0, 0)
-            if (i2s_channel_write(state.tx_chan, (void *)buffer, pos * 4, &written, 1000) != ESP_OK)
+            if (i2s_channel_write(state.tx_chan, (void *)buffer, pos * 4, &written, 20) != ESP_OK)
 #else
-            if (i2s_write(I2S_NUM_0, (void *)buffer, pos * 4, &written, 1000) != ESP_OK)
+            if (i2s_write(I2S_NUM_0, (void *)buffer, pos * 4, &written, 20) != ESP_OK)
 #endif
                 RG_LOGW("I2S Submission error! Written: %d/%d\n", written, pos * 4);
             pos = 0;
