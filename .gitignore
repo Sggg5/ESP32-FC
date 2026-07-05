@@ -14,6 +14,9 @@ build/
 /*.fw
 /*.img
 /*.zip
+/*.nes
+*.nes
+*.o
 
 # SDL2 build
 /sd
