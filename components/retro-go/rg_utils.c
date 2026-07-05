@@ -55,7 +55,7 @@ int rg_utf8_decode(const char **ptr)
     if (!ptr)
         return -1;
 
-    int first_byte = **ptr;
+    int first_byte = (uint8_t)**ptr;
     int codepoint = 0;
     size_t extra_bytes = 0;
 
@@ -88,7 +88,7 @@ int rg_utf8_decode(const char **ptr)
 
     for (size_t i = 0; i < extra_bytes; ++i)
     {
-        int next_byte = *(*ptr + i);
+        int next_byte = (uint8_t)*(*ptr + i);
         if ((next_byte & 0xC0) != 0x80)
         {
             RG_LOGD("Invalid multi-byte codepoint");
