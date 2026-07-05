@@ -121,7 +121,11 @@ void rg_gui_init(void)
     if (!rg_gui_set_language_id(rg_settings_get_number(NS_GLOBAL, SETTING_LANGUAGE, RG_LANG_DEFAULT)))
         rg_gui_set_language_id(0);
     RG_LOGI("GUI init: font...\n");
+#ifdef RG_FORCE_DEFAULT_FONT
+    if (!rg_gui_set_font(RG_FONT_DEFAULT))
+#else
     if (!rg_gui_set_font(rg_settings_get_number(NS_GLOBAL, SETTING_FONTTYPE, RG_FONT_DEFAULT)))
+#endif
         rg_gui_set_font(0);
     RG_LOGI("GUI init: theme...\n");
     rg_gui_set_theme(rg_settings_get_string(NS_GLOBAL, SETTING_THEME, NULL));
