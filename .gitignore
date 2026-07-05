@@ -19,6 +19,7 @@ build/
 *.o
 /audio-monitor.*
 /boot-audio*.*
+/i2s-test-monitor.*
 
 # SDL2 build
 /sd
