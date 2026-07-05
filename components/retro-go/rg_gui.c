@@ -305,6 +305,42 @@ void rg_gui_copy_buffer(int left, int top, int width, int height, int stride, co
     }
 }
 
+static size_t glyph_data_size(const rg_font_glyph_t *glyph)
+{
+    return glyph->width ? (((glyph->width * glyph->height) - 1) / 8) + 1 : 0;
+}
+
+static const rg_font_glyph_t *find_glyph(const rg_font_t *font, int c)
+{
+    enum { CACHE_SIZE = 16 };
+    static const rg_font_t *cache_font[CACHE_SIZE];
+    static int cache_code[CACHE_SIZE];
+    static const rg_font_glyph_t *cache_glyph[CACHE_SIZE];
+    static int next_slot;
+
+    for (int i = 0; i < CACHE_SIZE; i++)
+    {
+        if (cache_font[i] == font && cache_code[i] == c)
+            return cache_glyph[i];
+    }
+
+    const uint8_t *ptr = font->data;
+    const rg_font_glyph_t *glyph = (rg_font_glyph_t *)ptr;
+    while (glyph->code && glyph->code != c)
+    {
+        ptr += glyph_data_size(glyph);
+        ptr += sizeof(rg_font_glyph_t);
+        glyph = (rg_font_glyph_t *)ptr;
+    }
+
+    const rg_font_glyph_t *found = (glyph && glyph->code == c) ? glyph : NULL;
+    cache_font[next_slot] = font;
+    cache_code[next_slot] = c;
+    cache_glyph[next_slot] = found;
+    next_slot = (next_slot + 1) % CACHE_SIZE;
+    return found;
+}
+
 static size_t get_glyph(uint32_t *output, const rg_font_t *font, int points, int c)
 {
     // Some glyphs are always zero width
@@ -314,16 +350,7 @@ static size_t get_glyph(uint32_t *output, const rg_font_t *font, int points, int
     if (points <= 0)
         points = font->height;
 
-    const uint8_t *ptr = font->data;
-    const rg_font_glyph_t *glyph = (rg_font_glyph_t *)ptr;
-    // for (size_t i = 0; i < font->chars && glyph->code && glyph->code != c; ++i)
-    while (glyph->code && glyph->code != c)
-    {
-        if (glyph->width != 0)
-            ptr += (((glyph->width * glyph->height) - 1) / 8) + 1;
-        ptr += sizeof(rg_font_glyph_t);
-        glyph = (rg_font_glyph_t *)ptr;
-    }
+    const rg_font_glyph_t *glyph = find_glyph(font, c);
 
     if (glyph && glyph->code == c) // Glyph found
     {
@@ -348,11 +375,12 @@ static size_t get_glyph(uint32_t *output, const rg_font_t *font, int points, int
                         mask = 0x80;
                         ch = *data++;
                     }
-                    if ((ch & mask) != 0)
+                    if ((ch & mask) != 0 && xOffset + x >= 0 && xOffset + x < 32)
                         row |= (1 << (xOffset + x));
                     mask >>= 1;
                 }
-                output[yOffset + y] = row;
+                if (yOffset + y >= 0 && yOffset + y < points)
+                    output[yOffset + y] = row;
             }
             // Vertical stretching
             if (points != font->height)
