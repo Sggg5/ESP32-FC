@@ -71,11 +71,13 @@ static bool driver_init(int device, int sample_rate)
     {
     #if RG_AUDIO_USE_EXT_DAC
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(6, 0, 0)
-        i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
+        RG_LOGI("I2S: creating TX channel, sample_rate=%d\n", sample_rate);
+        i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_AUTO, I2S_ROLE_MASTER);
         chan_cfg.dma_desc_num = DMA_BUFFER_COUNT;
         chan_cfg.dma_frame_num = DMA_BUFFER_LEN;
 
         esp_err_t ret = i2s_new_channel(&chan_cfg, &state.tx_chan, NULL);
+        RG_LOGI("I2S: new_channel returned %s\n", esp_err_to_name(ret));
         if (ret == ESP_OK)
         {
             i2s_std_config_t std_cfg = {
@@ -94,10 +96,17 @@ static bool driver_init(int device, int sample_rate)
                     },
                 },
             };
+            RG_LOGI("I2S: init_std pins bclk=%d ws=%d dout=%d\n",
+                RG_GPIO_SND_I2S_BCK, RG_GPIO_SND_I2S_WS, RG_GPIO_SND_I2S_DATA);
             ret = i2s_channel_init_std_mode(state.tx_chan, &std_cfg);
+            RG_LOGI("I2S: init_std returned %s\n", esp_err_to_name(ret));
         }
         if (ret == ESP_OK)
+        {
+            RG_LOGI("I2S: enabling channel\n");
             ret = i2s_channel_enable(state.tx_chan);
+            RG_LOGI("I2S: enable returned %s\n", esp_err_to_name(ret));
+        }
         if (ret == ESP_OK)
             state.sample_rate = sample_rate;
         if (ret != ESP_OK)
