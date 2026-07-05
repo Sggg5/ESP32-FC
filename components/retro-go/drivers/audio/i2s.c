@@ -72,9 +72,9 @@ static bool driver_init(int device, int sample_rate)
     #if RG_AUDIO_USE_EXT_DAC
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(6, 0, 0)
         RG_LOGI("I2S: creating TX channel, sample_rate=%d\n", sample_rate);
-        i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_AUTO, I2S_ROLE_MASTER);
+        i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
         chan_cfg.dma_desc_num = DMA_BUFFER_COUNT;
-        chan_cfg.dma_frame_num = DMA_BUFFER_LEN;
+        chan_cfg.dma_frame_num = 256;
 
         esp_err_t ret = i2s_new_channel(&chan_cfg, &state.tx_chan, NULL);
         RG_LOGI("I2S: new_channel returned %s\n", esp_err_to_name(ret));

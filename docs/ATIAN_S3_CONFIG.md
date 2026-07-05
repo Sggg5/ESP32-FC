@@ -97,10 +97,10 @@ MAX98357A wiring reserved in the target config:
 
 Current state:
 
-- `RG_AUDIO_USE_EXT_DAC` is `0`.
-- The IDF 6 I2S driver path is present, but disabled for the main firmware.
-- Enabling it currently stalls inside `i2s_new_channel()` before the driver
-  returns, so the playable firmware falls back to the dummy audio sink.
+- `RG_AUDIO_USE_EXT_DAC` is `1`.
+- The IDF 6 I2S driver path is enabled for the MAX98357A.
+- A standalone `i2s-audio-test` app confirmed GPIO39/40/41 and the MAX98357A
+  can play a 440 Hz test tone.
 
 ## Flash partition layout
 

@@ -461,6 +461,10 @@ rg_app_t *rg_system_init(int sampleRate, const rg_handlers_t *handlers, void *_u
     rg_i2c_gpio_init();
 #endif
 
+    RG_LOGI("System init: initializing audio early...\n");
+    rg_audio_init(sampleRate);
+    RG_LOGI("System init: audio ready.\n");
+
     rg_storage_init();
     rg_input_init();
 
@@ -523,9 +527,6 @@ rg_app_t *rg_system_init(int sampleRate, const rg_handlers_t *handlers, void *_u
     app.romPath = app.bootArgs ?: ""; // For whatever reason some of our code isn't NULL-aware, sigh..
 
     RG_LOGI("System init: skipping startup hourglass.\n");
-    RG_LOGI("System init: initializing audio...\n");
-    rg_audio_init(sampleRate);
-    RG_LOGI("System init: audio ready.\n");
 
     rg_system_set_timezone(rg_settings_get_string(NS_GLOBAL, SETTING_TIMEZONE, "EST+5"));
     RG_LOGI("System init: skipping time load.\n");
