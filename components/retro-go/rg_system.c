@@ -486,16 +486,9 @@ rg_app_t *rg_system_init(int sampleRate, const rg_handlers_t *handlers, void *_u
     RG_LOGI("System init: initializing display...");
     rg_display_init();
     RG_LOGI("System init: display ready.");
-    if (strcmp(app.name, "launcher") == 0)
-    {
-        RG_LOGI("System init: skipping GUI for launcher auto-start.");
-    }
-    else
-    {
-        RG_LOGI("System init: initializing GUI...");
-        rg_gui_init();
-        RG_LOGI("System init: GUI ready.");
-    }
+    RG_LOGI("System init: initializing GUI...");
+    rg_gui_init();
+    RG_LOGI("System init: GUI ready.");
 
     if (enterRecoveryMode)
     {

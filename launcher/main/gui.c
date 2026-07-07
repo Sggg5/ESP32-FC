@@ -30,8 +30,6 @@ static int max_visible_lines(const tab_t *tab, int *_line_height)
 
 void gui_init(bool cold_boot)
 {
-    printf("TRACE gui_init enter cold_boot=%d\n", cold_boot);
-    fflush(stdout);
     RG_LOGI("gui_init: settings...");
     gui = (retro_gui_t){
         .selected_tab = 0,
@@ -44,16 +42,12 @@ void gui_init(bool cold_boot)
         .width        = rg_display_get_width(),
         .height       = rg_display_get_height(),
     };
-    printf("TRACE gui_init settings done %dx%d\n", gui.width, gui.height);
-    fflush(stdout);
     RG_LOGI("gui_init: flags...");
     // Auto: Show carousel on cold boot, browser on warm boot (after cleanly exiting an emulator)
     gui.browse = gui.start_screen == START_SCREEN_BROWSER || (gui.start_screen == START_SCREEN_AUTO && !cold_boot);
     gui.theme = &gui.themes[gui.color_theme % RG_COUNT(gui.themes)];
     gui.http_lock = false;
     gui.low_memory_mode = rg_system_get_app()->lowMemoryMode;
-    printf("TRACE gui_init flags done\n");
-    fflush(stdout);
     RG_LOGI("gui_init: surface %dx%d...", gui.width, gui.height);
     gui.surface = rg_surface_create(gui.width, gui.height, RG_PIXEL_565_LE, MEM_FAST);
     RG_LOGI("gui_init: theme...");
@@ -409,7 +403,8 @@ void gui_redraw(void)
     }
 
     rg_gui_set_surface(NULL);
-    rg_display_submit(gui.surface, 0);
+    rg_display_write_rect(0, 0, gui.surface->width, gui.surface->height,
+                          gui.surface->stride, gui.surface->data, RG_DISPLAY_WRITE_NOSYNC);
 }
 
 void gui_draw_preview(tab_t *tab)
@@ -424,66 +419,12 @@ void gui_draw_preview(tab_t *tab)
 
 void gui_draw_background(tab_t *tab, int shade)
 {
-    // We can't losslessly change shade, must reload!
-    if (tab->background && tab->background_shade > 0 && tab->background_shade != shade)
-    {
-        rg_surface_free(tab->background);
-        tab->background = NULL;
-    }
-
-    if (!tab->background)
-    {
-        tab->background = gui_get_image("background", tab->name); // Try background_<tabname>.png
-        if (!tab->background)
-            tab->background = gui_get_image("background", NULL); // Fallback to a background.png
-        tab->background_shade = 0;
-        if (tab->background && (tab->background->width != gui.width || tab->background->height != gui.height))
-        {
-            rg_image_t *temp = rg_surface_resize(tab->background, gui.width, gui.height);
-            if (temp)
-            {
-                rg_surface_free(tab->background);
-                tab->background = temp;
-            }
-        }
-    }
-
-    if (tab->background && tab->background_shade != shade && shade > 0)
-    {
-        rg_image_t *img = tab->background;
-        for (int y = 0; y < img->height; ++y)
-        {
-            uint16_t *line = img->data + y * img->stride;
-            for (int x = 0; x < img->width; ++x)
-            {
-                int pixel = line[x];
-                int r = ((pixel >> 11) & 0x1F) / shade;
-                int g = ((pixel >> 5) & 0x3F) / shade;
-                int b = ((pixel) & 0x1F) / shade;
-                line[x] = ((r & 0x1F) << 11) | ((g & 0x3F) << 5) | ((b & 0x1F) << 0);
-            }
-        }
-        tab->background_shade = shade;
-    }
-
-    if (tab->background)
-        rg_gui_draw_image(0, 0, gui.width, gui.height, false, tab->background);
-    else
-        rg_gui_draw_rect(0, 0, gui.width, gui.height, 0, 0, gui.theme->background);
+    rg_gui_draw_rect(0, 0, gui.width, gui.height, 0, 0, gui.theme->background);
 }
 
 void gui_draw_header(tab_t *tab, int offset)
 {
-    if (!tab->banner)
-        tab->banner = gui_get_image("banner", tab->name);
-    if (!tab->logo)
-        tab->logo = gui_get_image("logo", tab->name);
-
-    rg_gui_draw_image(0, offset, LOGO_WIDTH, HEADER_HEIGHT, false, tab->logo);
-    if (tab->banner)
-        rg_gui_draw_image(LOGO_WIDTH + 1, offset + 8, 0, HEADER_HEIGHT - 8, false, tab->banner);
-    else
-        rg_gui_draw_text(LOGO_WIDTH + 8, offset + 8, 0, tab->desc, gui.theme->foreground, C_TRANSPARENT, RG_TEXT_BIGGER);
+    rg_gui_draw_text(8, offset + 8, gui.width - 16, tab->desc, gui.theme->foreground, C_TRANSPARENT, RG_TEXT_BIGGER);
 }
 
 void gui_draw_tab_indicator(void)

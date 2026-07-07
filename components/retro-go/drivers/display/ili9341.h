@@ -63,10 +63,14 @@ static inline void spi_queue_transaction(const void *data, size_t length, uint32
         t->user = (void *)(type | 2);
     }
 
-    if (spi_device_queue_trans(spi_dev, t, pdMS_TO_TICKS(2500)) != ESP_OK)
+    if (spi_device_polling_transmit(spi_dev, t) != ESP_OK)
     {
         RG_PANIC("display");
     }
+
+    if ((int)t->user & 2)
+        spi_give_buffer((uint16_t *)t->tx_buffer);
+    xQueueSend(spi_transactions, &t, portMAX_DELAY);
 }
 
 IRAM_ATTR
@@ -132,7 +136,10 @@ static void spi_init(void)
     ret = spi_bus_add_device(RG_SCREEN_HOST, &devcfg, &spi_dev);
     RG_ASSERT(ret == ESP_OK, "spi_bus_add_device failed.");
 
-    rg_task_create("rg_spi", &spi_task, NULL, 1.5 * 1024, RG_TASK_PRIORITY_7, 1);
+    // This target shares the SPI bus with a hand-wired display. Use polling
+    // transfers to avoid the launcher and emulator getting stuck waiting for
+    // queued DMA transactions that never retire on this setup.
+    // rg_task_create("rg_spi", &spi_task, NULL, 1.5 * 1024, RG_TASK_PRIORITY_7, 1);
 }
 
 static void spi_deinit(void)

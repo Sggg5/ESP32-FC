@@ -201,11 +201,7 @@ static void retro_loop(void)
     bool redraw_pending = true;
 
     RG_LOGI("Launcher: gui_init...");
-    printf("TRACE retro_loop before gui_init\n");
-    fflush(stdout);
     gui_init(false);
-    printf("TRACE retro_loop after gui_init\n");
-    fflush(stdout);
     RG_LOGI("Launcher: applications_init...");
     applications_init();
     RG_LOGI("Launcher: skipping bookmarks_init.");
@@ -479,9 +475,6 @@ void app_main(void)
         rg_storage_mkdir(RG_BASE_PATH_CONFIG);
         try_migrate();
     }
-
-    RG_LOGI("Launcher: auto-starting NES ROM from internal flash.");
-    rg_system_switch_app("retro-core", "nes", RG_BASE_PATH_ROMS "/nes/Contra.nes", 0);
 
 #ifdef ESP_PLATFORM
     // The launcher makes a lot of small allocations and it sometimes fills internal RAM, causing the SD Card driver to

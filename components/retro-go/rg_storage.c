@@ -174,9 +174,6 @@ void rg_storage_init(void)
 
     if (error_code) // only if no previous storage was successfully mounted already
     {
-        RG_LOGW("Internal flash storage mount skipped for raw ROM partition test.");
-        error_code = 0;
-#if 0
         RG_LOGI("Looking for an internal flash partition labelled '%s' to mount for storage...", RG_STORAGE_FLASH_PARTITION);
 
         esp_vfs_fat_mount_config_t mount_config = {
@@ -187,7 +184,6 @@ void rg_storage_init(void)
 
         esp_err_t err = esp_vfs_fat_spiflash_mount(RG_STORAGE_ROOT, RG_STORAGE_FLASH_PARTITION, &mount_config, &wl_handle);
         error_code = (int)err;
-#endif
     }
 
 #endif
