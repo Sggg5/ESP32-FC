@@ -110,28 +110,6 @@ static void application_init(retro_app_t *app)
     if (app->initialized)
         return;
 
-    if (strcmp(app->short_name, "nes") == 0)
-    {
-        char *name = rg_bucket_insert(app->filenames, "Contra.nes", sizeof("Contra.nes"));
-        char *folder = rg_bucket_insert(app->filenames, RG_BASE_PATH_ROMS "/nes", sizeof(RG_BASE_PATH_ROMS "/nes"));
-        if (name && folder && app->files_capacity > 0)
-        {
-            app->files[0] = (retro_file_t) {
-                .name = name,
-                .folder = folder,
-                .checksum = 0,
-                .missing_cover = 0,
-                .saves = 0,
-                .type = RETRO_TYPE_FILE,
-                .app = app,
-            };
-            app->files_count = 1;
-        }
-        app->use_crc_covers = false;
-        app->initialized = true;
-        return;
-    }
-
     rg_storage_mkdir(app->paths.covers);
     rg_storage_mkdir(app->paths.saves);
     rg_storage_mkdir(app->paths.roms);
