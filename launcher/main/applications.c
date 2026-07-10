@@ -22,6 +22,19 @@ static struct __attribute__((__packed__))
 } *crc_cache;
 static bool crc_cache_dirty = true;
 
+static const char *flash_nes_roms[] = {
+    "01_Super_Contra_8.nes",
+    "02_Jackal_Unlimited.nes",
+    "03_Castlevania_2_HP.nes",
+    "04_Contra_Spread.nes",
+    "05_Street_Fighter_CONY.nes",
+    "06_Final_Fight_Invincible.nes",
+    "07_1945_Unlimited.nes",
+    "08_Double_Dragon_2.nes",
+    "09_Chip_Dale_2_HP.nes",
+    "10_Chip_Dale_1_HP_Lives.nes",
+};
+
 static retro_app_t *apps[24];
 static int apps_count = 0;
 
@@ -109,6 +122,26 @@ static void application_init(retro_app_t *app)
 
     if (app->initialized)
         return;
+
+    if (strcmp(app->short_name, "nes") == 0)
+    {
+        const char *folder = RG_BASE_PATH_ROMS "/nes";
+        for (size_t i = 0; i < sizeof(flash_nes_roms) / sizeof(flash_nes_roms[0]); i++)
+        {
+            app->files[app->files_count++] = (retro_file_t) {
+                .name = flash_nes_roms[i],
+                .folder = folder,
+                .checksum = 0,
+                .missing_cover = 0,
+                .saves = 0,
+                .type = RETRO_TYPE_FILE,
+                .app = app,
+            };
+        }
+        app->use_crc_covers = false;
+        app->initialized = true;
+        return;
+    }
 
     rg_storage_mkdir(app->paths.covers);
     rg_storage_mkdir(app->paths.saves);
@@ -338,7 +371,8 @@ static void tab_refresh(tab_t *tab, const char *selected)
 
     if (app->files_count > 0)
     {
-        gui_resize_list(tab, app->files_count);
+        if (app->files_count > tab->listbox.capacity)
+            gui_resize_list(tab, app->files_count);
 
         for (size_t i = 0; i < app->files_count; i++)
         {
@@ -369,7 +403,10 @@ static void tab_refresh(tab_t *tab, const char *selected)
         }
     }
 
-    gui_resize_list(tab, items_count);
+    if (items_count > tab->listbox.capacity)
+        gui_resize_list(tab, items_count);
+    else
+        tab->listbox.length = items_count;
     gui_sort_list(tab);
 
     if (items_count == 0)
