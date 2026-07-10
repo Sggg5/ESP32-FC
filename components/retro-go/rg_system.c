@@ -481,7 +481,8 @@ rg_app_t *rg_system_init(int sampleRate, const rg_handlers_t *handlers, void *_u
     rg_settings_init(enterRecoveryMode || showCrashDialog);
     RG_LOGI("System init: settings ready.");
     app.configNs = rg_settings_get_string(NS_BOOT, SETTING_BOOT_NAME, app.configNs);
-    app.bootArgs = rg_settings_get_string(NS_BOOT, SETTING_BOOT_ARGS, app.bootArgs);
+    const char *stored_boot_args = rg_settings_get_string(NS_BOOT, SETTING_BOOT_ARGS, app.bootArgs);
+    app.bootArgs = stored_boot_args ? strdup(stored_boot_args) : NULL;
     app.bootFlags = rg_settings_get_number(NS_BOOT, SETTING_BOOT_FLAGS, app.bootFlags);
     RG_LOGI("System init: initializing display...");
     rg_display_init();
