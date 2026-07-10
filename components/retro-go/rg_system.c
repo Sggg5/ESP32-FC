@@ -931,18 +931,12 @@ void rg_system_switch_app(const char *partition, const char *name, const char *a
 #if defined(ESP_PLATFORM)
     if (partition && strcmp(app.name, "launcher") == 0 && strcmp(partition, "retro-core") == 0)
     {
-        RG_LOGI("Fast switch: finding retro-core partition.");
-        const esp_partition_t *part = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_ANY, partition);
-        RG_LOGI("Fast switch: partition=%p.", part);
-        RG_LOGI("Fast switch: setting boot partition.");
-        esp_err_t err = part ? esp_ota_set_boot_partition(part) : ESP_ERR_NOT_FOUND;
-        RG_LOGI("Fast switch: set boot result=0x%02X.", err);
-        if (err == ESP_OK)
+        // Persist the selected ROM before restarting into the emulator app.
+        if (update_boot_config(partition, name, args, flags))
         {
-            RG_LOGI("Fast switching launcher to retro-core.");
             esp_restart();
         }
-        RG_LOGE("fast esp_ota_set_boot_partition returned 0x%02X!", err);
+        RG_LOGE("Failed to save boot config for retro-core.");
     }
 #endif
 
