@@ -112,15 +112,15 @@ area.
 | Name | Type | Offset | Size |
 | --- | --- | ---: | ---: |
 | `launcher` | app | `0x10000` | `0x110000` |
-| `retro-core` | app | `0x120000` | `0x100000` |
-| `rom0` | data `0x40` | `0x220000` | `0x100000` |
+| `retro-core` | app | `0x120000` | `0x110000` |
+| `rom0` | data `0x40` | `0x230000` | `0x0F0000` |
 | `vfs` | data `0x81` | `0x320000` | `0xB00000` |
 
 For the current NES test build, flash one mapper-0 `.nes` file into `rom0`:
 
 ```powershell
 python $env:IDF_PATH\components\esptool_py\esptool\esptool.py `
-  --chip esp32s3 --port COM4 write_flash 0x220000 path\to\game.nes
+  --chip esp32s3 --port COM4 write_flash 0x230000 path\to\game.nes
 ```
 
 Do not commit commercial ROM files to this repository.

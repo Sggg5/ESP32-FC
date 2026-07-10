@@ -216,51 +216,41 @@ void nes_main(void)
         RG_PANIC("Init failed.");
 
     int ret = -1;
-
-    // Use the launcher-selected file first. The raw rom0 partition is only a
-    // fallback for standalone boots without a launcher path.
-    // The internal raw partition is the stable path on this board. It avoids
-    // filesystem reads while validating the emulator and display pipeline.
-    if (true)
+    const esp_partition_t *rom0 = esp_partition_find_first(
+        ESP_PARTITION_TYPE_DATA, 0x40, "rom0");
+    if (rom0)
     {
-        const esp_partition_t *rom0 = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, 0x40, "rom0");
-        if (rom0)
+        uint8_t header[16];
+        if (esp_partition_read(rom0, 0, header, sizeof(header)) == ESP_OK
+            && memcmp(header, "NES\x1A", 4) == 0)
         {
-            uint8_t header[16];
-            size_t romSize = rom0->size;
-            esp_err_t err = esp_partition_read(rom0, 0, header, sizeof(header));
-            if (err == ESP_OK && memcmp(header, "NES\x1A", 4) == 0)
+            size_t romSize = 16 + header[4] * 16384 + header[5] * 8192
+                + ((header[6] & 0x04) ? 512 : 0);
+            const void *romData = NULL;
+            if (esp_partition_mmap(rom0, 0, romSize, ESP_PARTITION_MMAP_DATA,
+                    &romData, &rom0MapHandle) == ESP_OK)
             {
-                romSize = 16 + header[4] * 16384 + header[5] * 8192 + ((header[6] & 0x04) ? 512 : 0);
-                const void *romMapped = NULL;
-                esp_err_t mapErr = esp_partition_mmap(
-                    rom0, 0, romSize, ESP_PARTITION_MMAP_DATA, &romMapped, &rom0MapHandle);
-                if (mapErr == ESP_OK && romMapped)
-                {
-                    RG_LOGI("NES: Loading ROM from mapped flash, size=%d", (int)romSize);
-                    ret = nes_insertcart(rom_loadmem((uint8_t *)romMapped, romSize));
-                }
-                else
-                    RG_LOGW("NES: Unable to map raw ROM partition (err=%d).", mapErr);
-            }
-            if (ret < 0)
-            {
-                RG_LOGW("NES: raw ROM partition unavailable or invalid (err=%d).", err);
+                RG_LOGI("NES: Mapped %d bytes from rom0", (int)romSize);
+                ret = nes_insertcart(rom_loadmem((uint8_t *)romData, romSize));
             }
         }
     }
 
-    if (ret < 0 && rg_extension_match(app->romPath, "zip"))
+    const char *romPath = (app->romPath && app->romPath[0])
+        ? app->romPath
+        : RG_BASE_PATH_ROMS "/nes/02_Jackal_Unlimited.nes";
+
+    if (ret < 0 && rg_extension_match(romPath, "zip"))
     {
         void *data;
         size_t size;
-        if (!rg_storage_unzip_file(app->romPath, NULL, &data, &size, RG_FILE_ALIGN_8KB))
+        if (!rg_storage_unzip_file(romPath, NULL, &data, &size, RG_FILE_ALIGN_8KB))
             RG_PANIC("ROM file unzipping failed!");
         ret = nes_insertcart(rom_loadmem(data, size));
     }
     else if (ret < 0)
     {
-        ret = nes_loadfile(app->romPath);
+        ret = nes_loadfile(romPath);
     }
 
     if (ret == -1)
