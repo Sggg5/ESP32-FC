@@ -13,7 +13,7 @@ static nes_t *nes;
 static rg_app_t *app;
 static rg_surface_t *updates[2];
 static rg_surface_t *currentUpdate;
-static uint8_t *rom0Ram;
+static esp_partition_mmap_handle_t rom0MapHandle;
 
 static const char *SETTING_AUTOCROP = "autocrop";
 static const char *SETTING_OVERSCAN = "overscan";
@@ -232,35 +232,16 @@ void nes_main(void)
             if (err == ESP_OK && memcmp(header, "NES\x1A", 4) == 0)
             {
                 romSize = 16 + header[4] * 16384 + header[5] * 8192 + ((header[6] & 0x04) ? 512 : 0);
-                bool copiedToRam = false;
-                if (romSize <= 512 * 1024)
+                const void *romMapped = NULL;
+                esp_err_t mapErr = esp_partition_mmap(
+                    rom0, 0, romSize, ESP_PARTITION_MMAP_DATA, &romMapped, &rom0MapHandle);
+                if (mapErr == ESP_OK && romMapped)
                 {
-                    RG_LOGI("NES: Allocating RAM ROM buffer, size=%d", (int)romSize);
-                    rom0Ram = rg_alloc(romSize, MEM_FAST | MEM_NOPANIC);
-                    if (rom0Ram)
-                    {
-                        size_t pos;
-                        for (pos = 0; pos < romSize; pos += 256)
-                        {
-                            size_t chunkSize = MIN(256, romSize - pos);
-                            if ((pos & 0xFFF) == 0)
-                                RG_LOGI("NES: ROM copy offset=%d/%d", (int)pos, (int)romSize);
-                            err = esp_partition_read(rom0, pos, rom0Ram + pos, chunkSize);
-                            if (err != ESP_OK)
-                                break;
-                        }
-                        if (err == ESP_OK && pos >= romSize)
-                        {
-                            RG_LOGI("NES: Loading ROM from RAM buffer, size=%d", (int)romSize);
-                            ret = nes_insertcart(rom_loadmem(rom0Ram, romSize));
-                            copiedToRam = true;
-                        }
-                    }
+                    RG_LOGI("NES: Loading ROM from mapped flash, size=%d", (int)romSize);
+                    ret = nes_insertcart(rom_loadmem((uint8_t *)romMapped, romSize));
                 }
-                if (!copiedToRam && ret < 0)
-                {
-                    RG_LOGW("NES: Unable to copy raw ROM partition to RAM.");
-                }
+                else
+                    RG_LOGW("NES: Unable to map raw ROM partition (err=%d).", mapErr);
             }
             if (ret < 0)
             {
