@@ -217,48 +217,53 @@ void nes_main(void)
 
     int ret = -1;
 
-    const esp_partition_t *rom0 = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, 0x40, "rom0");
-    if (rom0)
+    // Use the launcher-selected file first. The raw rom0 partition is only a
+    // fallback for standalone boots without a launcher path.
+    if (!app->romPath || !app->romPath[0])
     {
-        uint8_t header[16];
-        size_t romSize = rom0->size;
-        esp_err_t err = esp_partition_read(rom0, 0, header, sizeof(header));
-        if (err == ESP_OK && memcmp(header, "NES\x1A", 4) == 0)
+        const esp_partition_t *rom0 = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, 0x40, "rom0");
+        if (rom0)
         {
-            romSize = 16 + header[4] * 16384 + header[5] * 8192 + ((header[6] & 0x04) ? 512 : 0);
-            bool copiedToRam = false;
-            if (romSize <= 512 * 1024)
+            uint8_t header[16];
+            size_t romSize = rom0->size;
+            esp_err_t err = esp_partition_read(rom0, 0, header, sizeof(header));
+            if (err == ESP_OK && memcmp(header, "NES\x1A", 4) == 0)
             {
-                RG_LOGI("NES: Allocating RAM ROM buffer, size=%d", (int)romSize);
-                rom0Ram = rg_alloc(romSize, MEM_FAST | MEM_NOPANIC);
-                if (rom0Ram)
+                romSize = 16 + header[4] * 16384 + header[5] * 8192 + ((header[6] & 0x04) ? 512 : 0);
+                bool copiedToRam = false;
+                if (romSize <= 512 * 1024)
                 {
-                    size_t pos;
-                    for (pos = 0; pos < romSize; pos += 256)
+                    RG_LOGI("NES: Allocating RAM ROM buffer, size=%d", (int)romSize);
+                    rom0Ram = rg_alloc(romSize, MEM_FAST | MEM_NOPANIC);
+                    if (rom0Ram)
                     {
-                        size_t chunkSize = MIN(256, romSize - pos);
-                        if ((pos & 0xFFF) == 0)
-                            RG_LOGI("NES: ROM copy offset=%d/%d", (int)pos, (int)romSize);
-                        err = esp_partition_read(rom0, pos, rom0Ram + pos, chunkSize);
-                        if (err != ESP_OK)
-                            break;
-                    }
-                    if (err == ESP_OK && pos >= romSize)
-                    {
-                        RG_LOGI("NES: Loading ROM from RAM buffer, size=%d", (int)romSize);
-                        ret = nes_insertcart(rom_loadmem(rom0Ram, romSize));
-                        copiedToRam = true;
+                        size_t pos;
+                        for (pos = 0; pos < romSize; pos += 256)
+                        {
+                            size_t chunkSize = MIN(256, romSize - pos);
+                            if ((pos & 0xFFF) == 0)
+                                RG_LOGI("NES: ROM copy offset=%d/%d", (int)pos, (int)romSize);
+                            err = esp_partition_read(rom0, pos, rom0Ram + pos, chunkSize);
+                            if (err != ESP_OK)
+                                break;
+                        }
+                        if (err == ESP_OK && pos >= romSize)
+                        {
+                            RG_LOGI("NES: Loading ROM from RAM buffer, size=%d", (int)romSize);
+                            ret = nes_insertcart(rom_loadmem(rom0Ram, romSize));
+                            copiedToRam = true;
+                        }
                     }
                 }
+                if (!copiedToRam && ret < 0)
+                {
+                    RG_LOGW("NES: Unable to copy raw ROM partition to RAM.");
+                }
             }
-            if (!copiedToRam && ret < 0)
+            if (ret < 0)
             {
-                RG_LOGW("NES: Unable to copy raw ROM partition to RAM.");
+                RG_LOGW("NES: raw ROM partition unavailable or invalid (err=%d).", err);
             }
-        }
-        if (ret < 0)
-        {
-            RG_LOGW("NES: raw ROM partition unavailable or invalid (err=%d).", err);
         }
     }
 
