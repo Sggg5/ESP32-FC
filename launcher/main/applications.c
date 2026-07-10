@@ -177,7 +177,9 @@ static void application_start(retro_file_t *file, int load_state)
         flags |= RG_BOOT_RESUME;
         flags |= (load_state << 4) & RG_BOOT_SLOT_MASK;
     }
+#ifndef RG_STORAGE_FLASH_PARTITION
     bookmark_add(BOOK_TYPE_RECENT, file); // This could relocate *file, but we no longer need it
+#endif
     rg_system_switch_app(part, name, path, flags);
 }
 
@@ -500,7 +502,7 @@ static void event_handler(gui_event_t event, tab_t *tab)
             }
             else if (file->type == RETRO_TYPE_FILE)
             {
-                application_show_file_menu(file, false);
+                application_start(file, -1);
             }
         }
     }
