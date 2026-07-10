@@ -219,7 +219,9 @@ void nes_main(void)
 
     // Use the launcher-selected file first. The raw rom0 partition is only a
     // fallback for standalone boots without a launcher path.
-    if (!app->romPath || !app->romPath[0])
+    // The internal raw partition is the stable path on this board. It avoids
+    // filesystem reads while validating the emulator and display pipeline.
+    if (true)
     {
         const esp_partition_t *rom0 = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, 0x40, "rom0");
         if (rom0)
