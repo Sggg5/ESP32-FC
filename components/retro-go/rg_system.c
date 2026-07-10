@@ -932,12 +932,15 @@ void rg_system_switch_app(const char *partition, const char *name, const char *a
 #if defined(ESP_PLATFORM)
     if (partition && strcmp(app.name, "launcher") == 0 && strcmp(partition, "retro-core") == 0)
     {
-        // Persist the selected ROM before restarting into the emulator app.
-        if (update_boot_config(partition, name, args, flags))
+        // ATIAN-S3 uses the raw rom0 fallback, so avoid filesystem writes during
+        // the launcher-to-core handoff.
+        const esp_partition_t *part = esp_partition_find_first(
+            ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_ANY, partition);
+        if (part && esp_ota_set_boot_partition(part) == ESP_OK)
         {
             esp_restart();
         }
-        RG_LOGE("Failed to save boot config for retro-core.");
+        RG_LOGE("Failed to switch to retro-core.");
     }
 #endif
 
