@@ -7,6 +7,9 @@
 
 #ifdef ESP_PLATFORM
 #include <esp_heap_caps.h>
+#include <esp_ota_ops.h>
+#include <esp_system.h>
+#include <nvs.h>
 #endif
 
 #include "applications.h"
@@ -19,6 +22,30 @@
 static rg_app_t *app;
 
 #define SETTING_WEBUI "HTTPFileServer"
+
+static void return_to_xiaozhi(void)
+{
+#ifdef ESP_PLATFORM
+    char label[17] = "xiaozhi_0";
+    size_t length = sizeof(label);
+    nvs_handle_t handle;
+    if (nvs_open("coexist", NVS_READONLY, &handle) == ESP_OK)
+    {
+        if (nvs_get_str(handle, "xiaozhi_slot", label, &length) != ESP_OK)
+            strcpy(label, "xiaozhi_0");
+        nvs_close(handle);
+    }
+
+    const esp_partition_t *partition = esp_partition_find_first(
+        ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_ANY, label);
+    if (!partition)
+        partition = esp_partition_find_first(
+            ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_ANY, "xiaozhi_0");
+    if (partition && esp_ota_set_boot_partition(partition) == ESP_OK)
+        esp_restart();
+    RG_LOGE("Unable to return to xiaozhi");
+#endif
+}
 
 static rg_gui_event_t toggle_tab_cb(rg_gui_option_t *option, rg_gui_event_t event)
 {
@@ -323,7 +350,7 @@ static void retro_loop(void)
                 if (tab->navpath)
                     gui_event(TAB_BACK, tab);
                 else
-                    gui.browse = false;
+                    return_to_xiaozhi();
                 redraw_pending = true;
             }
         }
@@ -331,6 +358,9 @@ static void retro_loop(void)
         {
             if (joystick & (RG_KEY_A | RG_KEY_START)) {
                 gui.browse = true;
+            }
+            else if (joystick & RG_KEY_B) {
+                return_to_xiaozhi();
             }
             else if (joystick & (RG_KEY_UP|RG_KEY_LEFT|RG_KEY_SELECT)) {
                 change_tab = -1;

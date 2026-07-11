@@ -2,7 +2,9 @@
 nvs,         data, nvs,     0x9000,   0x4000
 otadata,     data, ota,     0xd000,   0x2000
 phy_init,    data, phy,     0xf000,   0x1000
-launcher,    app,  ota_0,   0x10000,  0x110000
-retro-core,  app,  ota_1,   0x120000, 0x110000
-rom0,        data, 0x40,    0x230000, 0x0F0000
-vfs,         data, 0x81,    0x320000, 0xB00000
+xiaozhi_0,   app,  ota_0,   0x20000,  0x3f0000
+xiaozhi_1,   app,  ota_1,   0x410000, 0x3f0000
+assets,      data, spiffs,  0x800000, 0x200000
+launcher,    app,  ota_2,   0xa00000, 0x0c0000
+retro-core,  app,  ota_3,   0xac0000, 0x100000
+vfs,         data, 0x81,    0xbc0000, 0x440000
