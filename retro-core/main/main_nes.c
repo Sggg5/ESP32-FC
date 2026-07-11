@@ -207,10 +207,6 @@ void nes_main(void)
     autocrop = rg_settings_get_number(NS_APP, SETTING_AUTOCROP, 0);
     palette = rg_settings_get_number(NS_APP, SETTING_PALETTE, NES_PALETTE_PVM);
 
-    updates[0] = rg_surface_create(NES_SCREEN_PITCH, NES_SCREEN_HEIGHT, RG_PIXEL_PAL565_BE, MEM_FAST);
-    updates[1] = rg_surface_create(NES_SCREEN_PITCH, NES_SCREEN_HEIGHT, RG_PIXEL_PAL565_BE, MEM_FAST);
-    currentUpdate = updates[0];
-
     nes = nes_init(SYS_DETECT, app->sampleRate, true, RG_BASE_PATH_BIOS "/fds_bios.bin");
     if (!nes)
         RG_PANIC("Init failed.");
@@ -218,7 +214,7 @@ void nes_main(void)
     int ret = -1;
     const esp_partition_t *rom0 = esp_partition_find_first(
         ESP_PARTITION_TYPE_DATA, 0x40, "rom0");
-    if (rom0)
+    if ((!app->romPath || !app->romPath[0]) && rom0)
     {
         uint8_t header[16];
         if (esp_partition_read(rom0, 0, header, sizeof(header)) == ESP_OK
@@ -230,8 +226,41 @@ void nes_main(void)
             if (esp_partition_mmap(rom0, 0, romSize, ESP_PARTITION_MMAP_DATA,
                     &romData, &rom0MapHandle) == ESP_OK)
             {
-                RG_LOGI("NES: Mapped %d bytes from rom0", (int)romSize);
-                ret = nes_insertcart(rom_loadmem((uint8_t *)romData, romSize));
+                uint8_t *romCopy = heap_caps_malloc(romSize,
+                    MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+                if (romCopy)
+                {
+                    esp_err_t readResult = ESP_OK;
+                    for (size_t offset = 0; offset < romSize; offset += 4096)
+                    {
+                        size_t chunk = romSize - offset;
+                        if (chunk > 4096) chunk = 4096;
+                        readResult = esp_partition_read(rom0, offset, romCopy + offset, chunk);
+                        if (readResult != ESP_OK) break;
+                    }
+                    rom_t *loaded = readResult == ESP_OK
+                        ? rom_loadmem(romCopy, romSize) : NULL;
+                    if (loaded)
+                    {
+                        loaded->free_data_ptr = true;
+                        ret = nes_insertcart(loaded);
+                        RG_LOGI("NES: Copied %d bytes from rom0 to PSRAM", (int)romSize);
+                    }
+                    else
+                    {
+                        free(romCopy);
+                    }
+                }
+                if (romCopy)
+                {
+                    esp_partition_munmap(rom0MapHandle);
+                    rom0MapHandle = 0;
+                }
+                else
+                {
+                    RG_LOGW("NES: PSRAM unavailable, using mapped ROM");
+                    ret = nes_insertcart(rom_loadmem((uint8_t *)romData, romSize));
+                }
             }
         }
     }
@@ -262,6 +291,10 @@ void nes_main(void)
     else if (ret < 0)
         RG_PANIC("Unsupported ROM.");
 
+    updates[0] = rg_surface_create(NES_SCREEN_PITCH, NES_SCREEN_HEIGHT, RG_PIXEL_PAL565_BE, MEM_FAST);
+    updates[1] = rg_surface_create(NES_SCREEN_PITCH, NES_SCREEN_HEIGHT, RG_PIXEL_PAL565_BE, MEM_FAST);
+    currentUpdate = updates[0];
+
     nes->blit_func = blit_screen;
 
     nsfPlayer = nes->cart->type == ROM_TYPE_NSF;
@@ -283,7 +316,6 @@ void nes_main(void)
     rg_system_set_tick_rate(nes->refresh_rate);
 
     int skipFrames = 0;
-
     while (true)
     {
         uint32_t joystick = rg_input_read_gamepad();

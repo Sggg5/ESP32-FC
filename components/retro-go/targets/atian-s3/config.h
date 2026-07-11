@@ -62,7 +62,7 @@
     {RG_KEY_START,  .num = GPIO_NUM_4,  .pullup = 1, .level = 0},\
     {RG_KEY_MENU,   .num = GPIO_NUM_3,  .pullup = 1, .level = 0},\
     {RG_KEY_A,      .num = GPIO_NUM_0,  .pullup = 1, .level = 0},\
-    {RG_KEY_B,      .num = GPIO_NUM_37, .pullup = 1, .level = 0},\
+    {RG_KEY_B,      .num = GPIO_NUM_47, .pullup = 1, .level = 0},\
 }
 
 // Battery

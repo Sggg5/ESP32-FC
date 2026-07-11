@@ -299,8 +299,9 @@ static void retro_loop(void)
             if (joystick == RG_KEY_SELECT) {
                 change_tab = -1;
             }
-            else if (joystick == RG_KEY_START) {
-                change_tab = 1;
+            else if (joystick & (RG_KEY_A | RG_KEY_START)) {
+                gui_event(TAB_ACTION, tab);
+                redraw_pending = true;
             }
             else if (joystick == RG_KEY_UP) {
                 gui_scroll_list(tab, SCROLL_LINE, -1);
@@ -318,10 +319,6 @@ static void retro_loop(void)
                 gui_scroll_list(tab, SCROLL_PAGE, 1);
                 redraw_pending = true;
             }
-            else if (joystick == RG_KEY_A) {
-                gui_event(TAB_ACTION, tab);
-                redraw_pending = true;
-            }
             else if (joystick == RG_KEY_B) {
                 if (tab->navpath)
                     gui_event(TAB_BACK, tab);
@@ -332,14 +329,14 @@ static void retro_loop(void)
         }
         else
         {
-            if (joystick & (RG_KEY_UP|RG_KEY_LEFT|RG_KEY_SELECT)) {
+            if (joystick & (RG_KEY_A | RG_KEY_START)) {
+                gui.browse = true;
+            }
+            else if (joystick & (RG_KEY_UP|RG_KEY_LEFT|RG_KEY_SELECT)) {
                 change_tab = -1;
             }
-            else if (joystick & (RG_KEY_DOWN|RG_KEY_RIGHT|RG_KEY_START)) {
+            else if (joystick & (RG_KEY_DOWN|RG_KEY_RIGHT)) {
                 change_tab = 1;
-            }
-            else if (joystick == RG_KEY_A) {
-                gui.browse = true;
             }
         }
 
