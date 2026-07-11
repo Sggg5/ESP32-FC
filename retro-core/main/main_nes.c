@@ -1,6 +1,7 @@
 #include "shared.h"
 
 #include "esp_partition.h"
+#include "nvs.h"
 #include <nofrendo.h>
 
 static int overscan = true;
@@ -203,6 +204,20 @@ void nes_main(void)
 
     app = rg_system_reinit(AUDIO_SAMPLE_RATE, &handlers, NULL);
 
+    char requestedRom[RG_PATH_MAX + 1] = {0};
+    size_t requestedRomLength = sizeof(requestedRom);
+    nvs_handle_t coexistHandle;
+    if (nvs_open("coexist", NVS_READWRITE, &coexistHandle) == ESP_OK)
+    {
+        if (nvs_get_str(coexistHandle, "game_rom", requestedRom, &requestedRomLength) == ESP_OK)
+        {
+            nvs_erase_key(coexistHandle, "game_rom");
+            nvs_commit(coexistHandle);
+            RG_LOGI("NES: Voice requested '%s'", requestedRom);
+        }
+        nvs_close(coexistHandle);
+    }
+
     overscan = rg_settings_get_number(NS_APP, SETTING_OVERSCAN, 1);
     autocrop = rg_settings_get_number(NS_APP, SETTING_AUTOCROP, 0);
     palette = rg_settings_get_number(NS_APP, SETTING_PALETTE, NES_PALETTE_PVM);
@@ -214,7 +229,7 @@ void nes_main(void)
     int ret = -1;
     const esp_partition_t *rom0 = esp_partition_find_first(
         ESP_PARTITION_TYPE_DATA, 0x40, "rom0");
-    if ((!app->romPath || !app->romPath[0]) && rom0)
+    if (!requestedRom[0] && (!app->romPath || !app->romPath[0]) && rom0)
     {
         uint8_t header[16];
         if (esp_partition_read(rom0, 0, header, sizeof(header)) == ESP_OK
@@ -265,9 +280,9 @@ void nes_main(void)
         }
     }
 
-    const char *romPath = (app->romPath && app->romPath[0])
-        ? app->romPath
-        : RG_BASE_PATH_ROMS "/nes/02_Jackal_Unlimited.nes";
+    const char *romPath = requestedRom[0] ? requestedRom
+        : ((app->romPath && app->romPath[0]) ? app->romPath
+        : RG_BASE_PATH_ROMS "/nes/02_Jackal_Unlimited.nes");
 
     if (ret < 0 && rg_extension_match(romPath, "zip"))
     {
