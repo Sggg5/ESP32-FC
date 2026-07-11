@@ -7,9 +7,6 @@
 
 #ifdef ESP_PLATFORM
 #include <esp_heap_caps.h>
-#include <esp_ota_ops.h>
-#include <esp_system.h>
-#include <nvs.h>
 #endif
 
 #include "applications.h"
@@ -22,30 +19,6 @@
 static rg_app_t *app;
 
 #define SETTING_WEBUI "HTTPFileServer"
-
-static void return_to_xiaozhi(void)
-{
-#ifdef ESP_PLATFORM
-    char label[17] = "xiaozhi_0";
-    size_t length = sizeof(label);
-    nvs_handle_t handle;
-    if (nvs_open("coexist", NVS_READONLY, &handle) == ESP_OK)
-    {
-        if (nvs_get_str(handle, "xiaozhi_slot", label, &length) != ESP_OK)
-            strcpy(label, "xiaozhi_0");
-        nvs_close(handle);
-    }
-
-    const esp_partition_t *partition = esp_partition_find_first(
-        ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_ANY, label);
-    if (!partition)
-        partition = esp_partition_find_first(
-            ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_ANY, "xiaozhi_0");
-    if (partition && esp_ota_set_boot_partition(partition) == ESP_OK)
-        esp_restart();
-    RG_LOGE("Unable to return to xiaozhi");
-#endif
-}
 
 static rg_gui_event_t toggle_tab_cb(rg_gui_option_t *option, rg_gui_event_t event)
 {
@@ -226,6 +199,7 @@ static void retro_loop(void)
     int change_tab = 0;
     int browse_last = -1;
     bool redraw_pending = true;
+    int64_t last_input = rg_system_timer();
 
     RG_LOGI("Launcher: gui_init...");
     gui_init(false);
@@ -261,6 +235,7 @@ static void retro_loop(void)
 
         if ((gui.joystick = rg_input_read_gamepad()))
         {
+            last_input = rg_system_timer();
             if (prev_joystick != gui.joystick)
             {
                 joystick = gui.joystick;
@@ -274,6 +249,9 @@ static void retro_loop(void)
                 next_repeat = rg_system_timer() + 400000 / (repeats + 1);
             }
         }
+
+        if (rg_system_timer() - last_input >= 300000000LL)
+            rg_system_switch_to_xiaozhi();
 
         if (joystick & (RG_KEY_MENU|RG_KEY_OPTION))
         {
@@ -350,7 +328,7 @@ static void retro_loop(void)
                 if (tab->navpath)
                     gui_event(TAB_BACK, tab);
                 else
-                    return_to_xiaozhi();
+                    rg_system_switch_to_xiaozhi();
                 redraw_pending = true;
             }
         }
@@ -360,7 +338,7 @@ static void retro_loop(void)
                 gui.browse = true;
             }
             else if (joystick & RG_KEY_B) {
-                return_to_xiaozhi();
+                rg_system_switch_to_xiaozhi();
             }
             else if (joystick & (RG_KEY_UP|RG_KEY_LEFT|RG_KEY_SELECT)) {
                 change_tab = -1;

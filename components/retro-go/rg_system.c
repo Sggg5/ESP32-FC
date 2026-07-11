@@ -18,6 +18,7 @@
 #include <esp_system.h>
 #include <esp_timer.h>
 #include <esp_sleep.h>
+#include <nvs.h>
 #include <driver/gpio.h>
 #else
 #include <SDL2/SDL.h>
@@ -923,6 +924,31 @@ void rg_system_exit(void)
 {
     RG_LOGW("Exiting application!");
     rg_system_switch_app(RG_APP_LAUNCHER, 0, 0, 0);
+}
+
+void rg_system_switch_to_xiaozhi(void)
+{
+#if defined(ESP_PLATFORM)
+    char label[17] = "xiaozhi_0";
+    size_t length = sizeof(label);
+    nvs_handle_t handle;
+    if (nvs_open("coexist", NVS_READONLY, &handle) == ESP_OK)
+    {
+        if (nvs_get_str(handle, "xiaozhi_slot", label, &length) != ESP_OK)
+            strcpy(label, "xiaozhi_0");
+        nvs_close(handle);
+    }
+    const esp_partition_t *partition = esp_partition_find_first(
+        ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_ANY, label);
+    if (!partition)
+        partition = esp_partition_find_first(
+            ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_ANY, "xiaozhi_0");
+    if (partition && esp_ota_set_boot_partition(partition) == ESP_OK)
+        esp_restart();
+    RG_PANIC("Unable to return to xiaozhi");
+#else
+    exit(0);
+#endif
 }
 
 void rg_system_switch_app(const char *partition, const char *name, const char *args, uint32_t flags)

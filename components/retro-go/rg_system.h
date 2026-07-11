@@ -218,6 +218,7 @@ void rg_system_sleep(void) __attribute__((noreturn));
 void rg_system_restart(void) __attribute__((noreturn));
 void rg_system_exit(void) __attribute__((noreturn));
 void rg_system_switch_app(const char *part, const char *name, const char *args, uint32_t flags) __attribute__((noreturn));
+void rg_system_switch_to_xiaozhi(void) __attribute__((noreturn));
 bool rg_system_have_app(const char *app);
 void rg_system_set_indicator(rg_indicator_t indicator, bool on);
 bool rg_system_get_indicator(rg_indicator_t indicator);

@@ -316,9 +316,14 @@ void nes_main(void)
     rg_system_set_tick_rate(nes->refresh_rate);
 
     int skipFrames = 0;
+    int64_t lastInputTime = rg_system_timer();
     while (true)
     {
         uint32_t joystick = rg_input_read_gamepad();
+        if (joystick)
+            lastInputTime = rg_system_timer();
+        else if (rg_system_timer() - lastInputTime >= 300000000LL)
+            rg_system_switch_to_xiaozhi();
 
         if (joystick & (RG_KEY_MENU|RG_KEY_OPTION))
         {
