@@ -1,155 +1,131 @@
-# ATIAN-S3 configuration interface
+# ATIAN-S3 hardware and firmware reference
 
-This document records the hardware interface for the custom ESP32-S3 handheld
-target in `components/retro-go/targets/atian-s3/config.h`.
+This document is the source of truth for the custom ESP32-S3 board used by
+this repository. For a step-by-step Chinese build guide, see
+[`TUTORIAL_ZH-CN.md`](TUTORIAL_ZH-CN.md).
 
-## Build target
+## Board requirements
 
-- Target name: `ATIAN-S3`
-- Retro-Go build target: `RG_TARGET_ATIAN_S3`
-- ESP-IDF target: `esp32s3`
-- Tested ESP-IDF profile: `C:\Espressif\tools\Microsoft.v6.0.1.PowerShell_profile.ps1`
-- Default serial port used during bring-up: `COM4`
+- ESP32-S3 with 16 MB flash and PSRAM
+- ILI9341 320x240 SPI LCD, no touch
+- Analog two-axis joystick
+- MAX98357A I2S amplifier and speaker
+- INMP441 I2S microphone
+- Optional SHT30 temperature/humidity sensor at I2C address `0x44`
 
-## LCD
+The Retro-Go target is `RG_TARGET_ATIAN_S3`. The reusable Xiaozhi board
+definition is included under [`xiaozhi-board/atian-s3`](../xiaozhi-board/atian-s3)
+and is copied to `main/boards/atian-s3` in a Xiaozhi source tree.
 
-ILI9341, SPI, no touch.
+## Wiring
 
-| Signal | GPIO |
+All modules must share GND. Power each module according to its board marking;
+the signal pins below use 3.3 V logic.
+
+### ILI9341 LCD and SD card
+
+| Signal | ESP32-S3 GPIO |
 | --- | ---: |
-| SCK | 12 |
-| MOSI | 11 |
-| MISO | 13 |
-| CS | 10 |
-| DC | 9 |
-| RST | 46 |
-| BL | 21 |
+| LCD SCK + SD SCK | 12 |
+| LCD MOSI + SD MOSI | 11 |
+| LCD MISO + SD MISO | 13 |
+| LCD CS | 10 |
+| LCD DC | 9 |
+| LCD RST | 46 |
+| LCD BL | 21 |
+| SD CS | 7 |
 
-Current display settings:
+Display settings: SPI2 at 40 MHz, `320x240`, ILI9341 BGR mode, MADCTL `0xA8`.
+The current build stores games in internal flash; the SD socket is reserved but
+not enabled in the stable configuration.
 
-- Driver: `RG_SCREEN_DRIVER 0`
-- Host: `SPI2_HOST`
-- SPI speed: `SPI_MASTER_FREQ_40M`
-- Size: `320x240`
-- Backlight: static GPIO high through `GPIO21`
-- Current MADCTL: `0xA8` (`MY | MV | BGR`)
+### Joystick and buttons
 
-Common MADCTL orientation values:
-
-| Purpose | Value |
-| --- | ---: |
-| Current: Y mirrored from base landscape | `0xA8` |
-| Base landscape used before Y mirror | `0x28` |
-| X and Y mirrored landscape | `0xE8` |
-
-If colors are wrong, keep `BGR` set first and only change orientation bits
-(`MY`, `MX`, `MV`) one at a time.
-
-## SD card SPI bus
-
-The SD card shares the LCD SPI bus.
-
-| Signal | GPIO |
-| --- | ---: |
-| SCK | 12 |
-| MOSI | 11 |
-| MISO | 13 |
-| CS | 7 |
-
-The current diagnostic firmware can boot a NES ROM directly from the `rom0`
-flash partition, so the SD card path is not required for the single-ROM test.
-
-## Joystick and buttons
-
-ADC joystick:
-
-| Control | GPIO | ADC |
+| Control | GPIO | Active state |
 | --- | ---: | --- |
-| X | 5 | `ADC_UNIT_1`, `ADC_CHANNEL_4` |
-| Y | 6 | `ADC_UNIT_1`, `ADC_CHANNEL_5` |
+| Joystick X | 5 | ADC1 channel 4 |
+| Joystick Y | 6 | ADC1 channel 5 |
+| Joystick press / Start | 4 | Low |
+| A / confirm / Xiaozhi talk | 0 | Low |
+| Menu | 3 | Low |
+| B / fire / back to Xiaozhi | 47 | Low |
 
-Current thresholds:
+The joystick direction thresholds are `0..800` and `3200..4096`. GPIO0 is a
+boot strap pin: do not hold it while resetting unless download mode is wanted.
 
-| Retro-Go key | ADC channel | Range |
-| --- | --- | --- |
-| Up | `ADC_CHANNEL_5` | `0..800` |
-| Down | `ADC_CHANNEL_5` | `3200..4096` |
-| Right | `ADC_CHANNEL_4` | `0..800` |
-| Left | `ADC_CHANNEL_4` | `3200..4096` |
+### Audio and microphone
 
-GPIO buttons:
+MAX98357A output:
 
-| Button | GPIO | Active level |
-| --- | ---: | ---: |
-| Start | 4 | 0 |
-| A | 0 | 0 |
-| B | 37 | 0 |
-
-## Audio
-
-MAX98357A wiring reserved in the target config:
-
-| MAX98357A signal | GPIO |
+| Signal | GPIO |
 | --- | ---: |
 | DIN | 39 |
 | BCLK | 40 |
-| LRC/WS | 41 |
+| LRC / WS | 41 |
 
-Current state:
+INMP441 input:
 
-- `RG_AUDIO_USE_EXT_DAC` is `1`.
-- The IDF 6 I2S driver path is enabled for the MAX98357A.
-- `RG_AUDIO_OUTPUT_GAIN` is `0.35f` to attenuate the MAX98357A output in
-  software before samples are sent to I2S.
-- A standalone `i2s-audio-test` app confirmed GPIO39/40/41 and the MAX98357A
-  can play a 440 Hz test tone.
+| Signal | GPIO |
+| --- | ---: |
+| SD / DOUT | 38 |
+| SCK / BCLK | 40 |
+| WS / LRC | 41 |
 
-## Flash partition layout
+The microphone and amplifier share BCLK and WS. Both use a 32-bit stereo I2S
+frame. Retro-Go's software output gain is `0.35`; Xiaozhi starts at 30 percent.
 
-The custom partition table keeps a small raw ROM slot in flash before the VFS
-area.
+### SHT30
 
-| Name | Type | Offset | Size |
-| --- | --- | ---: | ---: |
-| `launcher` | app | `0x10000` | `0x110000` |
-| `retro-core` | app | `0x120000` | `0x110000` |
-| `rom0` | data `0x40` | `0x230000` | `0x0F0000` |
-| `vfs` | data `0x81` | `0x320000` | `0xB00000` |
+| Signal | GPIO |
+| --- | ---: |
+| SDA | 17 |
+| SCL | 18 |
+| Address | `0x44` |
 
-For the current NES test build, flash one mapper-0 `.nes` file into `rom0`:
+## Controls
+
+In Xiaozhi, click GPIO0 to start/stop a conversation and long-press GPIO0 to
+open the game launcher. Voice tools recognize the game menu, Contra, Super
+Contra, and Jackal. Wake-word processing is disabled in the current memory-safe
+build.
+
+In the launcher, use the joystick to move, GPIO0 to confirm, GPIO4 for Start,
+GPIO47 for B/back, and GPIO3 for the emulator menu. An idle launcher or game
+returns to Xiaozhi after about five minutes.
+
+## Coexistence partition layout
+
+The board uses 16 MB flash. Do not use offsets from older `rom0` experiments.
+
+| Name | Offset | Size | Purpose |
+| --- | ---: | ---: | --- |
+| `nvs` | `0x009000` | `0x004000` | Wi-Fi and device settings |
+| `otadata` | `0x00D000` | `0x002000` | Selected application |
+| `xiaozhi_0` | `0x020000` | `0x3F0000` | Xiaozhi application slot A |
+| `xiaozhi_1` | `0x410000` | `0x3F0000` | Xiaozhi OTA slot B |
+| `assets` | `0x800000` | `0x200000` | Xiaozhi assets |
+| `launcher` | `0xA00000` | `0x0C0000` | Game launcher |
+| `retro-core` | `0xAC0000` | `0x100000` | NES emulator |
+| `vfs` | `0xBC0000` | `0x440000` | FAT image containing ROMs/config |
+
+Commercial ROMs, Wi-Fi credentials, activation data, NVS dumps, and private
+Xiaozhi assets must not be committed to this repository.
+
+## Helper scripts
 
 ```powershell
-python $env:IDF_PATH\components\esptool_py\esptool\esptool.py `
-  --chip esp32s3 --port COM4 write_flash 0x230000 path\to\game.nes
-```
+# Back up the complete board before changing partitions.
+.\scripts\atian-backup-flash.ps1 -Port COM4
 
-Do not commit commercial ROM files to this repository.
-
-## Build and flash
-
-Build the app:
-
-```powershell
+# Build launcher and NES core.
 .\scripts\atian-build.ps1
-```
 
-Flash only the app binary:
-
-```powershell
+# Update only the launcher and NES core. Xiaozhi/NVS/assets are preserved.
 .\scripts\atian-flash-app.ps1 -Port COM4
+
+# Build and flash VFS from a folder of user-supplied .nes files.
+.\scripts\atian-flash-rom.ps1 -Port COM4 -RomDirectory C:\path\to\nes
 ```
 
-Flash a test ROM into the `rom0` partition:
-
-```powershell
-.\scripts\atian-flash-rom.ps1 -Port COM4 -RomPath path\to\game.nes
-```
-
-## Current bring-up notes
-
-- Runtime serial logging is intentionally minimal; heavy per-frame or per-input
-  logs can slow the emulator enough to look frozen.
-- The current NES path copies the raw flash ROM partition into internal RAM
-  before starting the emulator.
-- VFS/launcher behavior is still diagnostic and should be restored before this
-  becomes a general multi-game firmware.
+The filenames in `launcher/main/applications.c` must match the files in the VFS
+image. See the Chinese tutorial before adding or renaming games.

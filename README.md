@@ -1,15 +1,22 @@
-# ESP32-FC ATIAN-S3 build
+# ESP32-FC: ESP32-S3 Xiaozhi + NES handheld
 
-This repository is a custom ESP32-S3 handheld console build based on
-[retro-go](https://github.com/ducalex/retro-go). It targets one local board with
-an ILI9341 LCD, ADC joystick, GPIO buttons, optional SPI flash ROM storage, and
-reserved I2S pins for a MAX98357A amplifier.
+This repository contains the Retro-Go side of a custom ESP32-S3 handheld that
+combines Xiaozhi voice assistant, a weather standby screen, and an NES emulator
+in one 16 MB flash layout. It targets an ILI9341 LCD, ADC joystick, GPIO
+buttons, MAX98357A speaker output, INMP441 microphone, and optional SHT30.
 
-The current hardware/configuration interface is documented in
-[docs/ATIAN_S3_CONFIG.md](docs/ATIAN_S3_CONFIG.md). Build and flash helpers live
-in [scripts/atian-build.ps1](scripts/atian-build.ps1),
-[scripts/atian-flash-app.ps1](scripts/atian-flash-app.ps1), and
-[scripts/atian-flash-rom.ps1](scripts/atian-flash-rom.ps1).
+## ATIAN-S3 tutorial
+
+- **[中文完整复现教程](docs/TUTORIAL_ZH-CN.md)**: 接线、备份、编译、共存烧录、添加 ROM 和故障排查
+- [Hardware and partition reference](docs/ATIAN_S3_CONFIG.md)
+
+ROM files, Wi-Fi credentials, activation data, and private assets are
+intentionally not included. Back up the complete board before changing the
+partition table.
+
+Build and flash helpers live in the [`scripts`](scripts) directory. The safe
+workflow is to back up first, update the two emulator applications separately,
+and only rebuild the VFS partition when changing games.
 
 # Table of contents
 - [Description](#description)

@@ -1,0 +1,17 @@
+{
+    "target": "esp32s3",
+    "builds": [
+        {
+            "name": "atian-s3",
+            "sdkconfig_append": [
+                "CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y",
+                "CONFIG_PARTITION_TABLE_CUSTOM_FILENAME=\"partitions/v2/16m-coexist.csv\"",
+                "CONFIG_LANGUAGE_ZH_CN=y",
+                "CONFIG_USE_AUDIO_PROCESSOR=n",
+                "CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y",
+                "CONFIG_LV_FONT_MONTSERRAT_40=y",
+                "CONFIG_WAKE_WORD_DISABLED=y"
+            ]
+        }
+    ]
+}

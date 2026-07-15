@@ -5,20 +5,30 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-if (Test-Path $IdfProfile) {
-    & $IdfProfile
-}
-else {
+if (-not (Test-Path -LiteralPath $IdfProfile)) {
     throw "ESP-IDF PowerShell profile not found: $IdfProfile"
 }
 
+& $IdfProfile
 $RepoRoot = Split-Path -Parent $PSScriptRoot
-Set-Location (Join-Path $RepoRoot "retro-core")
 
-idf.py app `
-    -DRG_PROJECT_APP=retro-core `
-    -DRG_PROJECT_VER=$ProjectVersion `
-    -DRG_BUILD_TARGET=RG_TARGET_ATIAN_S3 `
-    -DRG_BUILD_RELEASE=0 `
-    -DRG_ENABLE_PROFILING=0 `
-    -DRG_ENABLE_NETWORKING=1
+foreach ($Project in @("launcher", "retro-core")) {
+    Write-Host "Building $Project for ATIAN-S3..."
+    Push-Location (Join-Path $RepoRoot $Project)
+    try {
+        idf.py app `
+            "-DRG_PROJECT_APP=$Project" `
+            "-DRG_PROJECT_VER=$ProjectVersion" `
+            -DRG_BUILD_TARGET=RG_TARGET_ATIAN_S3 `
+            -DRG_BUILD_RELEASE=0 `
+            -DRG_ENABLE_PROFILING=0 `
+            -DRG_ENABLE_NETWORKING=1
+    }
+    finally {
+        Pop-Location
+    }
+}
+
+Write-Host "Build complete:"
+Write-Host "  launcher\build\launcher.bin"
+Write-Host "  retro-core\build\retro-core.bin"
