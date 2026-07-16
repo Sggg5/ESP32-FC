@@ -1,5 +1,6 @@
 #include <esp_log.h>
 #include <driver/spi_common.h>
+#include <driver/gpio.h>
 #include <driver/i2s_std.h>
 #include <driver/i2c_master.h>
 #include <esp_adc/adc_oneshot.h>
@@ -46,11 +47,34 @@
 #include "led/single_led.h"
 #include "mcp_server.h"
 #include "font_awesome.h"
+#include "screen_stream_app.h"
 
 #define TAG "AtianS3"
 
 LV_FONT_DECLARE(font_awesome_30_4);
+LV_FONT_DECLARE(font_awesome_16_4);
 LV_FONT_DECLARE(font_atian_ui_20_4);
+LV_FONT_DECLARE(font_atian_ui_14_4);
+LV_IMAGE_DECLARE(cloud_sun);
+LV_IMAGE_DECLARE(radio);
+LV_IMAGE_DECLARE(bot);
+LV_IMAGE_DECLARE(gamepad_2);
+LV_IMAGE_DECLARE(home_weather);
+LV_IMAGE_DECLARE(home_radio);
+LV_IMAGE_DECLARE(home_bot);
+LV_IMAGE_DECLARE(home_game);
+LV_IMAGE_DECLARE(detail_weather);
+LV_IMAGE_DECLARE(detail_radio);
+LV_IMAGE_DECLARE(forecast_sun);
+LV_IMAGE_DECLARE(forecast_cloud);
+LV_IMAGE_DECLARE(forecast_rain);
+LV_IMAGE_DECLARE(forecast_storm);
+LV_IMAGE_DECLARE(sun);
+LV_IMAGE_DECLARE(cloud);
+LV_IMAGE_DECLARE(cloud_rain);
+LV_IMAGE_DECLARE(cloud_lightning);
+LV_IMAGE_DECLARE(snowflake);
+LV_IMAGE_DECLARE(cloud_fog);
 
 template <typename T>
 class PsramAllocator {
@@ -110,17 +134,20 @@ private:
     lv_obj_t* radio_panel_ = nullptr;
     lv_obj_t* radio_station_label_ = nullptr;
     lv_obj_t* radio_status_label_ = nullptr;
+    lv_obj_t* radio_clock_label_ = nullptr;
     lv_obj_t* menu_panel_ = nullptr;
     lv_obj_t* menu_items_[4] = {};
-    lv_obj_t* menu_dots_[4] = {};
+    lv_obj_t* menu_icons_[4] = {};
+    lv_obj_t* menu_detail_labels_[4] = {};
     lv_obj_t* menu_clock_label_ = nullptr;
+    lv_obj_t* forecast_labels_[3] = {};
+    lv_obj_t* forecast_icons_[3] = {};
     std::atomic<bool> menu_visible_ = false;
     int menu_selection_ = 0;
     float indoor_temperature_ = NAN;
     float indoor_humidity_ = NAN;
     int aqi_ = -1;
     bool has_forecast_ = false;
-    bool showing_forecast_ = false;
     bool bottom_module_dirty_ = true;
 
     struct ForecastDay {
@@ -129,50 +156,67 @@ private:
         int high = 0;
     } forecast_[3];
 
-    void RefreshBottomModule(time_t now) {
-        const bool show_forecast = has_forecast_ && ((now / 8) % 2 != 0);
-        if (!bottom_module_dirty_ && show_forecast == showing_forecast_)
+    void RefreshBottomModule(time_t) {
+        if (!bottom_module_dirty_)
             return;
-
-        showing_forecast_ = show_forecast;
         bottom_module_dirty_ = false;
-        char left_text[40];
-        char center_text[40];
-        char right_text[40];
-        if (show_forecast) {
-            snprintf(left_text, sizeof(left_text), "%s\n%d~%d\xC2\xB0",
-                     forecast_[0].condition, forecast_[0].low, forecast_[0].high);
-            snprintf(center_text, sizeof(center_text), "%s\n%d~%d\xC2\xB0",
-                     forecast_[1].condition, forecast_[1].low, forecast_[1].high);
-            snprintf(right_text, sizeof(right_text), "%s\n%d~%d\xC2\xB0",
-                     forecast_[2].condition, forecast_[2].low, forecast_[2].high);
+
+        char indoor_text[40];
+        char humidity_text[40];
+        char air_text[40];
+        if (std::isnan(indoor_temperature_)) {
+            snprintf(indoor_text, sizeof(indoor_text), "室内\n--.-\xC2\xB0");
         } else {
-            if (std::isnan(indoor_temperature_))
-                snprintf(left_text, sizeof(left_text), "室内\n--.-\xC2\xB0");
-            else
-                snprintf(left_text, sizeof(left_text), "室内\n%.1f\xC2\xB0", indoor_temperature_);
-            if (std::isnan(indoor_humidity_))
-                snprintf(center_text, sizeof(center_text), "湿度\n--%%");
-            else
-                snprintf(center_text, sizeof(center_text), "湿度\n%.0f%%", indoor_humidity_);
-            if (aqi_ < 0) {
-                snprintf(right_text, sizeof(right_text), "空气\n--");
-            } else {
-                const char* quality = aqi_ <= 50 ? "优" : aqi_ <= 100 ? "良" :
-                                      aqi_ <= 150 ? "轻度" : aqi_ <= 200 ? "中度" : "较差";
-                snprintf(right_text, sizeof(right_text), "空气 %s\n%d", quality, aqi_);
-            }
+            snprintf(indoor_text, sizeof(indoor_text), "室内\n%.1f\xC2\xB0", indoor_temperature_);
         }
-        lv_label_set_text(temperature_label_, left_text);
-        lv_label_set_text(indoor_humidity_label_, center_text);
-        lv_label_set_text(aqi_label_, right_text);
+        if (std::isnan(indoor_humidity_)) {
+            snprintf(humidity_text, sizeof(humidity_text), "湿度\n--%%");
+        } else {
+            snprintf(humidity_text, sizeof(humidity_text), "湿度\n%.0f%%", indoor_humidity_);
+        }
+        if (aqi_ < 0) {
+            snprintf(air_text, sizeof(air_text), "空气\n--");
+        } else {
+            const char* quality = aqi_ <= 50 ? "优" : aqi_ <= 100 ? "良" :
+                                  aqi_ <= 150 ? "轻度" : aqi_ <= 200 ? "中度" : "较差";
+            snprintf(air_text, sizeof(air_text), "空气\n%s %d", quality, aqi_);
+        }
+        lv_label_set_text(temperature_label_, indoor_text);
+        lv_label_set_text(indoor_humidity_label_, humidity_text);
+        lv_label_set_text(aqi_label_, air_text);
+
+        static const char* day_names[] = {"今天", "明天", "后天"};
+        for (int i = 0; i < 3; ++i) {
+            if (!forecast_labels_[i])
+                continue;
+            char forecast_text[32];
+            if (has_forecast_) {
+                snprintf(forecast_text, sizeof(forecast_text), "%s\n%d/%d\xC2\xB0",
+                         day_names[i], forecast_[i].low, forecast_[i].high);
+            } else {
+                snprintf(forecast_text, sizeof(forecast_text), "%s\n--/--\xC2\xB0", day_names[i]);
+            }
+            lv_label_set_text(forecast_labels_[i], forecast_text);
+        }
+    }
+
+    const lv_image_dsc_t* ForecastIconFor(const char* condition) const {
+        if (strstr(condition, "雷"))
+            return &forecast_storm;
+        if (strstr(condition, "雨") || strstr(condition, "雪"))
+            return &forecast_rain;
+        if (strstr(condition, "晴"))
+            return &forecast_sun;
+        return &forecast_cloud;
     }
 
     void CreateRadioPanel() {
-        auto text_font = &font_atian_ui_20_4;
-        const lv_color_t primary = lv_color_hex(0xf4f7f5);
-        const lv_color_t secondary = lv_color_hex(0x8fa09a);
-        const lv_color_t accent = lv_color_hex(0x59e0a1);
+        auto title_font = &font_atian_ui_20_4;
+        auto detail_font = &font_atian_ui_14_4;
+        const lv_color_t primary = lv_color_hex(0xf6f9ff);
+        const lv_color_t ink = lv_color_hex(0x3f275f);
+        const lv_color_t secondary = lv_color_hex(0x8657a2);
+        const lv_color_t accent = lv_color_hex(0x9a62df);
 
         radio_panel_ = lv_obj_create(lv_screen_active());
         lv_obj_set_size(radio_panel_, 320, 240);
@@ -180,62 +224,115 @@ private:
         lv_obj_set_style_radius(radio_panel_, 0, 0);
         lv_obj_set_style_border_width(radio_panel_, 0, 0);
         lv_obj_set_style_pad_all(radio_panel_, 0, 0);
-        lv_obj_set_style_bg_color(radio_panel_, lv_color_hex(0x090d0c), 0);
+        lv_obj_set_style_bg_color(radio_panel_, lv_color_hex(0x0b2048), 0);
+        lv_obj_set_style_bg_grad_color(radio_panel_, lv_color_hex(0x173f83), 0);
+        lv_obj_set_style_bg_grad_dir(radio_panel_, LV_GRAD_DIR_VER, 0);
         lv_obj_set_scrollbar_mode(radio_panel_, LV_SCROLLBAR_MODE_OFF);
 
+        lv_obj_t* back = lv_label_create(radio_panel_);
+        lv_label_set_text(back, FONT_AWESOME_ARROW_LEFT);
+        lv_obj_set_style_text_font(back, &font_awesome_16_4, 0);
+        lv_obj_set_style_text_color(back, primary, 0);
+        lv_obj_set_pos(back, 9, 8);
+
         lv_obj_t* title = lv_label_create(radio_panel_);
-        lv_label_set_text(title, "网络收音机");
-        lv_obj_set_style_text_font(title, text_font, 0);
-        lv_obj_set_style_text_color(title, secondary, 0);
-        lv_obj_align(title, LV_ALIGN_TOP_LEFT, 18, 15);
+        lv_label_set_text(title, "收音机");
+        lv_obj_set_style_text_font(title, title_font, 0);
+        lv_obj_set_style_text_color(title, primary, 0);
+        lv_obj_set_pos(title, 36, 5);
 
-        lv_obj_t* live = lv_label_create(radio_panel_);
-        lv_label_set_text(live, "LIVE");
-        lv_obj_set_style_text_font(live, text_font, 0);
+        lv_obj_t* wifi = lv_label_create(radio_panel_);
+        lv_label_set_text(wifi, FONT_AWESOME_WIFI);
+        lv_obj_set_style_text_font(wifi, &font_awesome_16_4, 0);
+        lv_obj_set_style_text_color(wifi, lv_color_hex(0x50e6dd), 0);
+        lv_obj_align(wifi, LV_ALIGN_TOP_RIGHT, -79, 8);
+
+        radio_clock_label_ = lv_label_create(radio_panel_);
+        lv_label_set_text(radio_clock_label_, "--:--");
+        lv_obj_set_width(radio_clock_label_, 65);
+        lv_obj_set_style_text_font(radio_clock_label_, title_font, 0);
+        lv_obj_set_style_text_color(radio_clock_label_, primary, 0);
+        lv_obj_set_style_text_align(radio_clock_label_, LV_TEXT_ALIGN_RIGHT, 0);
+        lv_obj_align(radio_clock_label_, LV_ALIGN_TOP_RIGHT, -7, 5);
+
+        lv_obj_t* info = lv_obj_create(radio_panel_);
+        lv_obj_set_size(info, 308, 136);
+        lv_obj_set_pos(info, 6, 36);
+        lv_obj_set_style_radius(info, 8, 0);
+        lv_obj_set_style_border_width(info, 1, 0);
+        lv_obj_set_style_border_color(info, lv_color_hex(0xe3cfee), 0);
+        lv_obj_set_style_bg_color(info, lv_color_hex(0xf8effb), 0);
+        lv_obj_set_style_bg_opa(info, LV_OPA_COVER, 0);
+        lv_obj_set_style_pad_all(info, 0, 0);
+        lv_obj_set_scrollbar_mode(info, LV_SCROLLBAR_MODE_OFF);
+
+        lv_obj_t* radio_image = lv_image_create(info);
+        lv_image_set_src(radio_image, &detail_radio);
+        lv_obj_set_size(radio_image, 96, 96);
+        lv_obj_set_pos(radio_image, 10, 18);
+
+        lv_obj_t* live = lv_label_create(info);
+        lv_label_set_text(live, "LIVE · 正在播放");
+        lv_obj_set_style_text_font(live, detail_font, 0);
         lv_obj_set_style_text_color(live, accent, 0);
-        lv_obj_align(live, LV_ALIGN_TOP_RIGHT, -18, 15);
+        lv_obj_set_pos(live, 116, 16);
 
-        lv_obj_t* icon_box = lv_obj_create(radio_panel_);
-        lv_obj_set_size(icon_box, 92, 92);
-        lv_obj_align(icon_box, LV_ALIGN_CENTER, 0, -25);
-        lv_obj_set_style_radius(icon_box, 8, 0);
-        lv_obj_set_style_border_width(icon_box, 1, 0);
-        lv_obj_set_style_border_color(icon_box, lv_color_hex(0x27322e), 0);
-        lv_obj_set_style_bg_color(icon_box, lv_color_hex(0x151b19), 0);
-        lv_obj_set_style_bg_opa(icon_box, LV_OPA_COVER, 0);
-        lv_obj_set_style_pad_all(icon_box, 0, 0);
-        lv_obj_set_scrollbar_mode(icon_box, LV_SCROLLBAR_MODE_OFF);
-
-        lv_obj_t* icon = lv_label_create(icon_box);
-        lv_label_set_text(icon, FONT_AWESOME_HEADPHONES);
-        lv_obj_set_style_text_font(icon, &font_awesome_30_4, 0);
-        lv_obj_set_style_text_color(icon, accent, 0);
-        lv_obj_set_style_transform_scale_x(icon, 500, 0);
-        lv_obj_set_style_transform_scale_y(icon, 500, 0);
-        lv_obj_align(icon, LV_ALIGN_CENTER, 0, 0);
-
-        radio_station_label_ = lv_label_create(radio_panel_);
+        radio_station_label_ = lv_label_create(info);
         lv_label_set_text(radio_station_label_, "宁波经济广播");
-        lv_obj_set_width(radio_station_label_, 284);
-        lv_obj_set_style_text_font(radio_station_label_, text_font, 0);
-        lv_obj_set_style_text_color(radio_station_label_, primary, 0);
-        lv_obj_set_style_text_align(radio_station_label_, LV_TEXT_ALIGN_CENTER, 0);
-        lv_obj_align(radio_station_label_, LV_ALIGN_CENTER, 0, 43);
+        lv_obj_set_width(radio_station_label_, 184);
+        lv_label_set_long_mode(radio_station_label_, LV_LABEL_LONG_DOT);
+        lv_obj_set_style_text_font(radio_station_label_, title_font, 0);
+        lv_obj_set_style_text_color(radio_station_label_, ink, 0);
+        lv_obj_set_style_text_align(radio_station_label_, LV_TEXT_ALIGN_LEFT, 0);
+        lv_obj_set_pos(radio_station_label_, 116, 44);
 
-        radio_status_label_ = lv_label_create(radio_panel_);
+        radio_status_label_ = lv_label_create(info);
         lv_label_set_text(radio_status_label_, "正在连接  ·  按 0 停止");
-        lv_obj_set_style_text_font(radio_status_label_, text_font, 0);
+        lv_obj_set_width(radio_status_label_, 184);
+        lv_obj_set_style_text_font(radio_status_label_, detail_font, 0);
         lv_obj_set_style_text_color(radio_status_label_, secondary, 0);
-        lv_obj_align(radio_status_label_, LV_ALIGN_BOTTOM_MID, 0, -18);
+        lv_obj_set_pos(radio_status_label_, 116, 74);
+
+        static const int bar_heights[] = {8, 18, 12, 24, 10, 16, 22, 9, 19, 13};
+        for (int i = 0; i < 10; ++i) {
+            lv_obj_t* bar = lv_obj_create(info);
+            lv_obj_set_size(bar, 4, bar_heights[i]);
+            lv_obj_set_pos(bar, 118 + i * 16, 126 - bar_heights[i]);
+            lv_obj_set_style_radius(bar, 2, 0);
+            lv_obj_set_style_border_width(bar, 0, 0);
+            lv_obj_set_style_bg_color(bar, lv_color_hex(0xc99df0), 0);
+            lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, 0);
+        }
+
+        static const char* controls[] = {"0  停止", "47  播放", "长按  切台"};
+        for (int i = 0; i < 3; ++i) {
+            lv_obj_t* control = lv_obj_create(radio_panel_);
+            lv_obj_set_size(control, 96, 48);
+            lv_obj_set_pos(control, 6 + i * 103, 178);
+            lv_obj_set_style_radius(control, 8, 0);
+            lv_obj_set_style_border_width(control, i == 1 ? 2 : 1, 0);
+            lv_obj_set_style_border_color(control, lv_color_hex(i == 1 ? 0xb985ed : 0xd8c7e6), 0);
+            lv_obj_set_style_bg_color(control, lv_color_hex(i == 1 ? 0xe8cff8 : 0xf8effb), 0);
+            lv_obj_set_style_bg_opa(control, LV_OPA_COVER, 0);
+            lv_obj_set_style_pad_all(control, 0, 0);
+            lv_obj_set_scrollbar_mode(control, LV_SCROLLBAR_MODE_OFF);
+
+            lv_obj_t* label = lv_label_create(control);
+            lv_label_set_text(label, controls[i]);
+            lv_obj_set_width(label, 90);
+            lv_obj_set_style_text_font(label, detail_font, 0);
+            lv_obj_set_style_text_color(label, i == 1 ? accent : secondary, 0);
+            lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+            lv_obj_align(label, LV_ALIGN_CENTER, 0, 0);
+        }
     }
 
     void CreateMainMenu() {
-        auto text_font = &font_atian_ui_20_4;
-        const lv_color_t background = lv_color_hex(0x090d0c);
-        const lv_color_t surface = lv_color_hex(0x151b19);
-        const lv_color_t primary = lv_color_hex(0xf4f7f5);
-        const lv_color_t secondary = lv_color_hex(0x8fa09a);
-        const lv_color_t accent = lv_color_hex(0x59e0a1);
+        auto title_font = &font_atian_ui_20_4;
+        auto detail_font = &font_atian_ui_14_4;
+        const lv_color_t background = lv_color_hex(0x0b2048);
+        const lv_color_t primary = lv_color_hex(0xf6f9ff);
+        const lv_color_t accent = lv_color_hex(0x50e6dd);
         menu_panel_ = lv_obj_create(lv_screen_active());
         lv_obj_set_size(menu_panel_, 320, 240);
         lv_obj_align(menu_panel_, LV_ALIGN_CENTER, 0, 0);
@@ -243,73 +340,103 @@ private:
         lv_obj_set_style_border_width(menu_panel_, 0, 0);
         lv_obj_set_style_pad_all(menu_panel_, 0, 0);
         lv_obj_set_style_bg_color(menu_panel_, background, 0);
+        lv_obj_set_style_bg_grad_color(menu_panel_, lv_color_hex(0x173f83), 0);
+        lv_obj_set_style_bg_grad_dir(menu_panel_, LV_GRAD_DIR_VER, 0);
         lv_obj_set_scrollbar_mode(menu_panel_, LV_SCROLLBAR_MODE_OFF);
 
-        lv_obj_t* title = lv_label_create(menu_panel_);
-        lv_label_set_text(title, "我的设备");
-        lv_obj_set_style_text_font(title, text_font, 0);
-        lv_obj_set_style_text_color(title, secondary, 0);
-        lv_obj_align(title, LV_ALIGN_TOP_LEFT, 16, 12);
+        lv_obj_t* brand = lv_label_create(menu_panel_);
+        lv_label_set_text(brand, "XIAOZHI");
+        lv_obj_set_style_text_font(brand, title_font, 0);
+        lv_obj_set_style_text_color(brand, primary, 0);
+        lv_obj_set_pos(brand, 8, 5);
 
         menu_clock_label_ = lv_label_create(menu_panel_);
         lv_label_set_text(menu_clock_label_, "--:--");
-        lv_obj_set_width(menu_clock_label_, 72);
-        lv_obj_set_style_text_font(menu_clock_label_, text_font, 0);
+        lv_obj_set_width(menu_clock_label_, 65);
+        lv_obj_set_style_text_font(menu_clock_label_, title_font, 0);
         lv_obj_set_style_text_color(menu_clock_label_, primary, 0);
         lv_obj_set_style_text_align(menu_clock_label_, LV_TEXT_ALIGN_RIGHT, 0);
-        lv_obj_align(menu_clock_label_, LV_ALIGN_TOP_RIGHT, -16, 12);
+        lv_obj_align(menu_clock_label_, LV_ALIGN_TOP_RIGHT, -7, 5);
 
-        static const char* names[] = {"小智", "天气", "收音机", "游戏"};
-        static const char* icons[] = {
-            FONT_AWESOME_USER_ROBOT, FONT_AWESOME_CLOUD_SUN,
-            FONT_AWESOME_HEADPHONES, FONT_AWESOME_GAMEPAD
+        lv_obj_t* wifi = lv_label_create(menu_panel_);
+        lv_label_set_text(wifi, FONT_AWESOME_WIFI);
+        lv_obj_set_style_text_font(wifi, &font_awesome_16_4, 0);
+        lv_obj_set_style_text_color(wifi, accent, 0);
+        lv_obj_align(wifi, LV_ALIGN_TOP_RIGHT, -79, 8);
+
+        lv_obj_t* divider = lv_obj_create(menu_panel_);
+        lv_obj_set_size(divider, 304, 1);
+        lv_obj_set_pos(divider, 8, 33);
+        lv_obj_set_style_border_width(divider, 0, 0);
+        lv_obj_set_style_bg_color(divider, lv_color_hex(0x2a568e), 0);
+        lv_obj_set_style_bg_opa(divider, LV_OPA_COVER, 0);
+        lv_obj_set_style_radius(divider, 0, 0);
+
+        static const char* names[] = {"天气", "收音机", "小智", "游戏机"};
+        static const char* details[] = {
+            "--.-\xC2\xB0 · 更新中", "10 个电台", "按下开始说话", "选择游戏"
+        };
+        static const lv_image_dsc_t* icons[] = {
+            &home_weather, &home_radio, &home_bot, &home_game
+        };
+        static const uint32_t card_colors[] = {
+            0xe9faf6, 0xf7effb, 0xeef6ff, 0xfff4df
+        };
+        static const uint32_t title_colors[] = {
+            0x17335f, 0x3f275f, 0x17335f, 0x51331e
+        };
+        static const uint32_t detail_colors[] = {
+            0x278f91, 0x8657a2, 0x4e78ad, 0xc2782c
         };
         for (int i = 0; i < 4; ++i) {
             menu_items_[i] = lv_obj_create(menu_panel_);
-            lv_obj_set_size(menu_items_[i], 184, 142);
-            lv_obj_align(menu_items_[i], LV_ALIGN_CENTER, 0, 6);
+            lv_obj_set_size(menu_items_[i], 151, 94);
+            lv_obj_set_pos(menu_items_[i], 6 + (i % 2) * 157, 38 + (i / 2) * 98);
             lv_obj_set_style_border_width(menu_items_[i], 1, 0);
-            lv_obj_set_style_border_color(menu_items_[i], lv_color_hex(0x27322e), 0);
+            lv_obj_set_style_border_color(menu_items_[i], lv_color_hex(0xcbd8e8), 0);
             lv_obj_set_style_radius(menu_items_[i], 8, 0);
             lv_obj_set_style_pad_all(menu_items_[i], 0, 0);
-            lv_obj_set_style_bg_color(menu_items_[i], surface, 0);
+            lv_obj_set_style_bg_color(menu_items_[i], lv_color_hex(card_colors[i]), 0);
             lv_obj_set_style_bg_opa(menu_items_[i], LV_OPA_COVER, 0);
+            lv_obj_set_style_shadow_width(menu_items_[i], 0, 0);
             lv_obj_set_scrollbar_mode(menu_items_[i], LV_SCROLLBAR_MODE_OFF);
 
-            lv_obj_t* icon = lv_label_create(menu_items_[i]);
-            lv_label_set_text(icon, icons[i]);
-            lv_obj_set_style_text_font(icon, &font_awesome_30_4, 0);
-            lv_obj_set_style_text_color(icon, accent, 0);
-            lv_obj_set_style_transform_scale_x(icon, 560, 0);
-            lv_obj_set_style_transform_scale_y(icon, 560, 0);
-            lv_obj_align(icon, LV_ALIGN_CENTER, 0, -23);
+            menu_icons_[i] = lv_image_create(menu_items_[i]);
+            lv_image_set_src(menu_icons_[i], icons[i]);
+            lv_obj_set_size(menu_icons_[i], 56, 56);
+            lv_obj_set_pos(menu_icons_[i], 7, 19);
 
             lv_obj_t* label = lv_label_create(menu_items_[i]);
             lv_label_set_text(label, names[i]);
-            lv_obj_set_style_text_font(label, text_font, 0);
-            lv_obj_set_style_text_color(label, primary, 0);
-            lv_obj_align(label, LV_ALIGN_BOTTOM_MID, 0, -15);
+            lv_obj_set_width(label, 80);
+            lv_obj_set_style_text_font(label, title_font, 0);
+            lv_obj_set_style_text_color(label, lv_color_hex(title_colors[i]), 0);
+            lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_LEFT, 0);
+            lv_obj_set_pos(label, 67, 20);
 
-            menu_dots_[i] = lv_obj_create(menu_panel_);
-            lv_obj_set_size(menu_dots_[i], 6, 6);
-            lv_obj_set_pos(menu_dots_[i], 133 + i * 17, 222);
-            lv_obj_set_style_radius(menu_dots_[i], LV_RADIUS_CIRCLE, 0);
-            lv_obj_set_style_border_width(menu_dots_[i], 0, 0);
-            lv_obj_set_style_pad_all(menu_dots_[i], 0, 0);
-            lv_obj_set_scrollbar_mode(menu_dots_[i], LV_SCROLLBAR_MODE_OFF);
+            menu_detail_labels_[i] = lv_label_create(menu_items_[i]);
+            lv_label_set_text(menu_detail_labels_[i], details[i]);
+            lv_obj_set_width(menu_detail_labels_[i], 80);
+            lv_obj_set_style_text_font(menu_detail_labels_[i], detail_font, 0);
+            lv_obj_set_style_text_color(menu_detail_labels_[i], lv_color_hex(detail_colors[i]), 0);
+            lv_obj_set_style_text_align(menu_detail_labels_[i], LV_TEXT_ALIGN_LEFT, 0);
+            lv_obj_set_pos(menu_detail_labels_[i], 67, 50);
         }
     }
 
     void RefreshMainMenu() {
+        static const uint32_t card_colors[] = {
+            0xe9faf6, 0xf7effb, 0xeef6ff, 0xfff4df
+        };
         for (int i = 0; i < 4; ++i) {
             const bool selected = i == menu_selection_;
-            if (selected)
-                lv_obj_remove_flag(menu_items_[i], LV_OBJ_FLAG_HIDDEN);
-            else
-                lv_obj_add_flag(menu_items_[i], LV_OBJ_FLAG_HIDDEN);
-            lv_obj_set_style_bg_color(menu_dots_[i],
-                lv_color_hex(selected ? 0x59e0a1 : 0x34413c), 0);
-            lv_obj_set_style_bg_opa(menu_dots_[i], LV_OPA_COVER, 0);
+            lv_obj_set_style_bg_color(menu_items_[i], lv_color_hex(card_colors[i]), 0);
+            lv_obj_set_style_border_width(menu_items_[i], selected ? 2 : 1, 0);
+            lv_obj_set_style_border_color(menu_items_[i],
+                lv_color_hex(selected ? 0x50e6dd : 0xcbd8e8), 0);
+            lv_obj_set_style_shadow_width(menu_items_[i], selected ? 7 : 0, 0);
+            lv_obj_set_style_shadow_color(menu_items_[i], lv_color_hex(0x50e6dd), 0);
+            lv_obj_set_style_shadow_opa(menu_items_[i], selected ? LV_OPA_40 : LV_OPA_TRANSP, 0);
         }
     }
 
@@ -485,14 +612,11 @@ private:
 #endif
 
     void CreateWeatherPanelLite() {
-        auto* theme = static_cast<LvglTheme*>(current_theme_);
-        auto text_font = theme->text_font()->font();
-
-        const lv_color_t background = lv_color_hex(0x090d0c);
-        const lv_color_t surface = lv_color_hex(0x151b19);
-        const lv_color_t primary = lv_color_hex(0xf4f7f5);
-        const lv_color_t secondary = lv_color_hex(0x8fa09a);
-        const lv_color_t accent = lv_color_hex(0x59e0a1);
+        auto title_font = &font_atian_ui_20_4;
+        auto detail_font = &font_atian_ui_14_4;
+        const lv_color_t primary = lv_color_hex(0xf6f9ff);
+        const lv_color_t ink = lv_color_hex(0x17335f);
+        const lv_color_t secondary = lv_color_hex(0x4e78ad);
 
         weather_panel_ = lv_obj_create(lv_screen_active());
         lv_obj_set_size(weather_panel_, 320, 240);
@@ -500,93 +624,125 @@ private:
         lv_obj_set_style_radius(weather_panel_, 0, 0);
         lv_obj_set_style_border_width(weather_panel_, 0, 0);
         lv_obj_set_style_pad_all(weather_panel_, 0, 0);
-        lv_obj_set_style_bg_color(weather_panel_, background, 0);
+        lv_obj_set_style_bg_color(weather_panel_, lv_color_hex(0x0b2048), 0);
+        lv_obj_set_style_bg_grad_color(weather_panel_, lv_color_hex(0x173f83), 0);
+        lv_obj_set_style_bg_grad_dir(weather_panel_, LV_GRAD_DIR_VER, 0);
         lv_obj_set_scrollbar_mode(weather_panel_, LV_SCROLLBAR_MODE_OFF);
 
+        lv_obj_t* back = lv_label_create(weather_panel_);
+        lv_label_set_text(back, FONT_AWESOME_ARROW_LEFT);
+        lv_obj_set_style_text_font(back, &font_awesome_16_4, 0);
+        lv_obj_set_style_text_color(back, primary, 0);
+        lv_obj_set_pos(back, 9, 8);
+
         comfort_label_ = lv_label_create(weather_panel_);
-        lv_label_set_text(comfort_label_, "慈溪市");
-        lv_obj_set_style_text_font(comfort_label_, text_font, 0);
+        lv_label_set_text(comfort_label_, "天气");
+        lv_obj_set_style_text_font(comfort_label_, title_font, 0);
         lv_obj_set_style_text_color(comfort_label_, primary, 0);
-        lv_obj_align(comfort_label_, LV_ALIGN_TOP_LEFT, 18, 14);
+        lv_obj_set_pos(comfort_label_, 36, 5);
+
+        lv_obj_t* wifi = lv_label_create(weather_panel_);
+        lv_label_set_text(wifi, FONT_AWESOME_WIFI);
+        lv_obj_set_style_text_font(wifi, &font_awesome_16_4, 0);
+        lv_obj_set_style_text_color(wifi, lv_color_hex(0x50e6dd), 0);
+        lv_obj_align(wifi, LV_ALIGN_TOP_RIGHT, -79, 8);
 
         clock_label_ = lv_label_create(weather_panel_);
         lv_label_set_text(clock_label_, "--:--");
-        lv_obj_set_style_text_font(clock_label_, text_font, 0);
+        lv_obj_set_width(clock_label_, 65);
+        lv_obj_set_style_text_font(clock_label_, title_font, 0);
         lv_obj_set_style_text_color(clock_label_, primary, 0);
-        lv_obj_align(clock_label_, LV_ALIGN_TOP_RIGHT, -18, 10);
+        lv_obj_set_style_text_align(clock_label_, LV_TEXT_ALIGN_RIGHT, 0);
+        lv_obj_align(clock_label_, LV_ALIGN_TOP_RIGHT, -7, 5);
+
+        lv_obj_t* hero = lv_obj_create(weather_panel_);
+        lv_obj_set_size(hero, 308, 96);
+        lv_obj_set_pos(hero, 6, 36);
+        lv_obj_set_style_radius(hero, 8, 0);
+        lv_obj_set_style_border_width(hero, 1, 0);
+        lv_obj_set_style_border_color(hero, lv_color_hex(0xc9e8ee), 0);
+        lv_obj_set_style_bg_color(hero, lv_color_hex(0xe9f7ff), 0);
+        lv_obj_set_style_bg_opa(hero, LV_OPA_COVER, 0);
+        lv_obj_set_style_pad_all(hero, 0, 0);
+        lv_obj_set_scrollbar_mode(hero, LV_SCROLLBAR_MODE_OFF);
+
+        humidity_label_ = lv_image_create(hero);
+        lv_image_set_src(humidity_label_, &detail_weather);
+        lv_obj_set_size(humidity_label_, 96, 96);
+        lv_obj_set_pos(humidity_label_, 8, 0);
 
         date_label_ = lv_label_create(weather_panel_);
         lv_label_set_text(date_label_, "--月--日");
-        lv_obj_set_style_text_font(date_label_, text_font, 0);
+        lv_obj_set_width(date_label_, 188);
+        lv_obj_set_style_text_font(date_label_, detail_font, 0);
         lv_obj_set_style_text_color(date_label_, secondary, 0);
-        lv_obj_align(date_label_, LV_ALIGN_TOP_RIGHT, -18, 36);
+        lv_obj_set_pos(date_label_, 120, 108);
 
         weather_label_ = lv_label_create(weather_panel_);
         lv_label_set_text(weather_label_, "更新中");
-        lv_obj_set_style_text_font(weather_label_, text_font, 0);
+        lv_obj_set_width(weather_label_, 188);
+        lv_obj_set_style_text_font(weather_label_, title_font, 0);
         lv_obj_set_style_text_color(weather_label_, secondary, 0);
-        lv_obj_align(weather_label_, LV_ALIGN_TOP_LEFT, 18, 43);
+        lv_obj_set_pos(weather_label_, 120, 80);
 
         outdoor_label_ = lv_label_create(weather_panel_);
         lv_label_set_text(outdoor_label_, "--.-\xC2\xB0");
         lv_obj_set_style_text_font(outdoor_label_, &lv_font_montserrat_40, 0);
-        lv_obj_set_style_text_color(outdoor_label_, primary, 0);
+        lv_obj_set_style_text_color(outdoor_label_, ink, 0);
         lv_obj_set_style_text_letter_space(outdoor_label_, 0, 0);
-        lv_obj_align(outdoor_label_, LV_ALIGN_CENTER, -53, 8);
+        lv_obj_set_pos(outdoor_label_, 118, 39);
 
-        humidity_label_ = lv_label_create(weather_panel_);
-        lv_label_set_text(humidity_label_, FONT_AWESOME_CLOUD);
-        lv_obj_set_style_text_font(humidity_label_, &font_awesome_30_4, 0);
-        lv_obj_set_style_text_color(humidity_label_, accent, 0);
-        lv_obj_set_style_transform_scale_x(humidity_label_, 420, 0);
-        lv_obj_set_style_transform_scale_y(humidity_label_, 420, 0);
-        lv_obj_set_style_transform_pivot_x(humidity_label_, 15, 0);
-        lv_obj_set_style_transform_pivot_y(humidity_label_, 15, 0);
-        lv_obj_align(humidity_label_, LV_ALIGN_CENTER, 77, 10);
+        lv_obj_t** metric_labels[] = {
+            &temperature_label_, &indoor_humidity_label_, &aqi_label_
+        };
+        static const char* metric_text[] = {"室内\n--.-\xC2\xB0", "湿度\n--%", "空气\n--"};
+        static const uint32_t metric_colors[] = {0xeaf6ff, 0xe9fbfa, 0xf0f9e9};
+        for (int i = 0; i < 3; ++i) {
+            lv_obj_t* metric = lv_obj_create(weather_panel_);
+            lv_obj_set_size(metric, 97, 42);
+            lv_obj_set_pos(metric, 6 + i * 103, 136);
+            lv_obj_set_style_radius(metric, 8, 0);
+            lv_obj_set_style_border_width(metric, 1, 0);
+            lv_obj_set_style_border_color(metric, lv_color_hex(0xd3e3eb), 0);
+            lv_obj_set_style_bg_color(metric, lv_color_hex(metric_colors[i]), 0);
+            lv_obj_set_style_bg_opa(metric, LV_OPA_COVER, 0);
+            lv_obj_set_style_pad_all(metric, 0, 0);
+            lv_obj_set_scrollbar_mode(metric, LV_SCROLLBAR_MODE_OFF);
 
-        lv_obj_t* sensor_band = lv_obj_create(weather_panel_);
-        lv_obj_set_size(sensor_band, 284, 54);
-        lv_obj_align(sensor_band, LV_ALIGN_BOTTOM_MID, 0, -12);
-        lv_obj_set_style_border_width(sensor_band, 1, 0);
-        lv_obj_set_style_border_color(sensor_band, lv_color_hex(0x27322e), 0);
-        lv_obj_set_style_bg_color(sensor_band, surface, 0);
-        lv_obj_set_style_bg_opa(sensor_band, LV_OPA_COVER, 0);
-        lv_obj_set_style_radius(sensor_band, 8, 0);
-        lv_obj_set_style_pad_all(sensor_band, 0, 0);
-        lv_obj_set_scrollbar_mode(sensor_band, LV_SCROLLBAR_MODE_OFF);
+            *metric_labels[i] = lv_label_create(metric);
+            lv_label_set_text(*metric_labels[i], metric_text[i]);
+            lv_obj_set_width(*metric_labels[i], 93);
+            lv_obj_set_style_text_font(*metric_labels[i], detail_font, 0);
+            lv_obj_set_style_text_color(*metric_labels[i], i == 2 ? lv_color_hex(0x55985d) : secondary, 0);
+            lv_obj_set_style_text_align(*metric_labels[i], LV_TEXT_ALIGN_CENTER, 0);
+            lv_obj_align(*metric_labels[i], LV_ALIGN_CENTER, 0, 0);
+        }
 
-        temperature_label_ = lv_label_create(sensor_band);
-        lv_label_set_text(temperature_label_, "室内\n--.-\xC2\xB0");
-        lv_obj_set_width(temperature_label_, 92);
-        lv_obj_set_style_text_font(temperature_label_, text_font, 0);
-        lv_obj_set_style_text_color(temperature_label_, primary, 0);
-        lv_obj_set_style_text_align(temperature_label_, LV_TEXT_ALIGN_CENTER, 0);
-        lv_obj_align(temperature_label_, LV_ALIGN_LEFT_MID, 1, 0);
+        for (int i = 0; i < 3; ++i) {
+            lv_obj_t* forecast_card = lv_obj_create(weather_panel_);
+            lv_obj_set_size(forecast_card, 97, 53);
+            lv_obj_set_pos(forecast_card, 6 + i * 103, 182);
+            lv_obj_set_style_radius(forecast_card, 8, 0);
+            lv_obj_set_style_border_width(forecast_card, i == 0 ? 2 : 1, 0);
+            lv_obj_set_style_border_color(forecast_card, lv_color_hex(i == 0 ? 0x55d5d5 : 0xd4e0ee), 0);
+            lv_obj_set_style_bg_color(forecast_card, lv_color_hex(0xf5f8ff), 0);
+            lv_obj_set_style_bg_opa(forecast_card, LV_OPA_COVER, 0);
+            lv_obj_set_style_pad_all(forecast_card, 0, 0);
+            lv_obj_set_scrollbar_mode(forecast_card, LV_SCROLLBAR_MODE_OFF);
 
-        indoor_humidity_label_ = lv_label_create(sensor_band);
-        lv_label_set_text(indoor_humidity_label_, "湿度\n--%");
-        lv_obj_set_width(indoor_humidity_label_, 92);
-        lv_obj_set_style_text_font(indoor_humidity_label_, text_font, 0);
-        lv_obj_set_style_text_color(indoor_humidity_label_, primary, 0);
-        lv_obj_set_style_text_align(indoor_humidity_label_, LV_TEXT_ALIGN_CENTER, 0);
-        lv_obj_align(indoor_humidity_label_, LV_ALIGN_CENTER, 0, 0);
+            forecast_icons_[i] = lv_image_create(forecast_card);
+            lv_image_set_src(forecast_icons_[i], &forecast_cloud);
+            lv_obj_set_size(forecast_icons_[i], 32, 32);
+            lv_obj_set_pos(forecast_icons_[i], 4, 10);
 
-        aqi_label_ = lv_label_create(sensor_band);
-        lv_label_set_text(aqi_label_, "空气\n--");
-        lv_obj_set_width(aqi_label_, 92);
-        lv_obj_set_style_text_font(aqi_label_, text_font, 0);
-        lv_obj_set_style_text_color(aqi_label_, primary, 0);
-        lv_obj_set_style_text_align(aqi_label_, LV_TEXT_ALIGN_CENTER, 0);
-        lv_obj_align(aqi_label_, LV_ALIGN_RIGHT_MID, -1, 0);
-
-        for (int x : {94, 189}) {
-            lv_obj_t* separator = lv_obj_create(sensor_band);
-            lv_obj_set_size(separator, 1, 34);
-            lv_obj_set_pos(separator, x, 10);
-            lv_obj_set_style_border_width(separator, 0, 0);
-            lv_obj_set_style_bg_color(separator, lv_color_hex(0x34413c), 0);
-            lv_obj_set_style_bg_opa(separator, LV_OPA_COVER, 0);
-            lv_obj_set_style_radius(separator, 0, 0);
+            forecast_labels_[i] = lv_label_create(forecast_card);
+            lv_label_set_text(forecast_labels_[i], i == 0 ? "今天\n--/--\xC2\xB0" :
+                                                   i == 1 ? "明天\n--/--\xC2\xB0" : "后天\n--/--\xC2\xB0");
+            lv_obj_set_width(forecast_labels_[i], 58);
+            lv_obj_set_style_text_font(forecast_labels_[i], detail_font, 0);
+            lv_obj_set_style_text_color(forecast_labels_[i], ink, 0);
+            lv_obj_set_style_text_align(forecast_labels_[i], LV_TEXT_ALIGN_CENTER, 0);
+            lv_obj_set_pos(forecast_labels_[i], 36, 7);
         }
     }
 
@@ -607,8 +763,6 @@ public:
         indoor_humidity_ = humidity;
         bottom_module_dirty_ = true;
         RefreshBottomModule(time(nullptr));
-        lv_obj_remove_flag(weather_panel_, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_move_foreground(weather_panel_);
     }
 
     void SetClock(time_t now) {
@@ -647,21 +801,11 @@ public:
         bottom_module_dirty_ = true;
         RefreshBottomModule(time(nullptr));
 
-        const char* icon = FONT_AWESOME_CLOUD;
-        if (strstr(condition, "晴")) {
-            icon = FONT_AWESOME_SUN;
-        } else if (strstr(condition, "雷")) {
-            icon = FONT_AWESOME_CLOUD_BOLT;
-        } else if (strstr(condition, "雨")) {
-            icon = FONT_AWESOME_CLOUD_RAIN;
-        } else if (strstr(condition, "雪")) {
-            icon = FONT_AWESOME_SNOWFLAKE;
-        } else if (strstr(condition, "雾") || strstr(condition, "霾")) {
-            icon = FONT_AWESOME_CLOUD_FOG;
-        } else if (strstr(condition, "多云")) {
-            icon = FONT_AWESOME_CLOUD_SUN;
+        if (menu_detail_labels_[0]) {
+            char summary[48];
+            snprintf(summary, sizeof(summary), "%.1f\xC2\xB0 · %s", temperature, condition);
+            lv_label_set_text(menu_detail_labels_[0], summary);
         }
-        lv_label_set_text(humidity_label_, icon);
     }
 
     void SetForecast(const char* const conditions[3], const int lows[3], const int highs[3]) {
@@ -674,6 +818,8 @@ public:
             snprintf(forecast_[i].condition, sizeof(forecast_[i].condition), "%s", conditions[i]);
             forecast_[i].low = lows[i];
             forecast_[i].high = highs[i];
+            if (forecast_icons_[i])
+                lv_image_set_src(forecast_icons_[i], ForecastIconFor(conditions[i]));
         }
         has_forecast_ = true;
         bottom_module_dirty_ = true;
@@ -699,6 +845,17 @@ public:
             lv_obj_add_flag(status_bar_, LV_OBJ_FLAG_HIDDEN);
         lv_label_set_text(radio_station_label_, station);
         lv_label_set_text(radio_status_label_, status);
+        if (radio_clock_label_) {
+            time_t now = time(nullptr);
+            struct tm local_time = {};
+            localtime_r(&now, &local_time);
+            char clock_text[8];
+            snprintf(clock_text, sizeof(clock_text), "%02d:%02d",
+                     local_time.tm_hour, local_time.tm_min);
+            lv_label_set_text(radio_clock_label_, clock_text);
+        }
+        if (menu_detail_labels_[1])
+            lv_label_set_text(menu_detail_labels_[1], "正在播放");
         lv_obj_remove_flag(radio_panel_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_move_foreground(radio_panel_);
     }
@@ -715,6 +872,8 @@ public:
             return;
         DisplayLockGuard lock(this);
         lv_obj_add_flag(radio_panel_, LV_OBJ_FLAG_HIDDEN);
+        if (menu_detail_labels_[1])
+            lv_label_set_text(menu_detail_labels_[1], "未播放");
         if (weather_panel_) {
             lv_obj_remove_flag(weather_panel_, LV_OBJ_FLAG_HIDDEN);
             lv_obj_move_foreground(weather_panel_);
@@ -959,6 +1118,7 @@ private:
     Button menu_button_;
     Button joystick_button_;
     AtianWeatherDisplay* display_;
+    std::unique_ptr<screen_stream::ScreenStreamApp> screen_stream_;
     adc_oneshot_unit_handle_t joystick_adc_ = nullptr;
     i2c_master_bus_handle_t sensor_i2c_bus_ = nullptr;
     i2c_master_dev_handle_t sht30_ = nullptr;
@@ -969,6 +1129,7 @@ private:
     std::atomic<bool> radio_playback_active_ = false;
     std::atomic<bool> radio_playback_drained_ = true;
     std::atomic<int> radio_station_ = 0;
+    std::atomic<bool> radio_button_armed_ = false;
     std::atomic<bool> menu_shown_on_boot_ = false;
 
     static constexpr size_t kRadioPcmBufferBytes = 32768;
@@ -984,6 +1145,12 @@ private:
         {"中国之声", "http://lhttp.qtfm.cn/live/15318317/64k.mp3"},
         {"清晨音乐台", "http://lhttp.qingting.fm/live/4915/64k.mp3"},
         {"上海动感101", "http://lhttp.qingting.fm/live/274/64k.mp3"},
+        {"华语经典", "http://lhttp.qtfm.cn/live/5022308/64k.mp3"},
+        {"动听音乐台", "http://lhttp-hw.qtfm.cn/live/5022107/64k.mp3"},
+        {"上海经典金曲", "http://lhttp-hw.qtfm.cn/live/273/64k.mp3"},
+        {"上海经典音乐", "http://lhttp-hw.qtfm.cn/live/267/64k.mp3"},
+        {"北京新闻广播", "http://lhttp.qtfm.cn/live/339/64k.mp3"},
+        {"小说评书广播", "http://lhttp.qtfm.cn/live/1951/64k.mp3"},
     };
 
     static uint8_t Sht30Crc(const uint8_t* data) {
@@ -1620,23 +1787,23 @@ private:
             case 0:
                 if (radio_enabled_.load())
                     StopRadio();
+                display_->ShowWeather();
+                break;
+            case 1:
+                StartRadio(radio_station_.load());
+                break;
+            case 2:
+                if (radio_enabled_.load())
+                    StopRadio();
                 display_->ShowXiaozhiChrome();
                 Application::GetInstance().Schedule([]() {
                     Application::GetInstance().ToggleChatState();
                 });
                 break;
-            case 1:
-                if (radio_enabled_.load())
-                    StopRadio();
-                display_->ShowWeather();
-                break;
-            case 2:
-                StartRadio(radio_station_.load());
-                break;
             case 3:
                 if (radio_enabled_.load())
                     StopRadio();
-                SwitchToGameLauncher();
+                screen_stream_->ShowGameMenu();
                 break;
         }
     }
@@ -1659,7 +1826,8 @@ private:
             while (true) {
                 int x = 2048;
                 int y = 2048;
-                if (board->display_->IsMainMenuVisible() &&
+                if ((board->display_->IsMainMenuVisible() ||
+                     board->screen_stream_->IsGameMenuVisible()) &&
                     adc_oneshot_read(board->joystick_adc_, JOYSTICK_X_CHANNEL, &x) == ESP_OK &&
                     adc_oneshot_read(board->joystick_adc_, JOYSTICK_Y_CHANNEL, &y) == ESP_OK) {
                     int direction = 0;
@@ -1668,11 +1836,15 @@ private:
                     else if (x > 2900)
                         direction = 1;
                     else if (y < 1100)
-                        direction = -1;
+                        direction = -2;
                     else if (y > 2900)
-                        direction = 1;
-                    if (direction != 0 && last_direction == 0)
-                        board->display_->MoveMainMenu(direction);
+                        direction = 2;
+                    if (direction != 0 && last_direction == 0) {
+                        if (board->screen_stream_->IsGameMenuVisible())
+                            board->screen_stream_->MoveGameMenu(direction);
+                        else
+                            board->display_->MoveMainMenu(direction);
+                    }
                     last_direction = direction;
                 } else {
                     last_direction = 0;
@@ -1685,6 +1857,13 @@ private:
 
     void InitializeButtons() {
         boot_button_.OnClick([this]() {
+            if (screen_stream_->IsActive())
+                return;
+            if (screen_stream_->IsGameMenuVisible()) {
+                screen_stream_->HideGameMenu();
+                display_->ShowMainMenu();
+                return;
+            }
             if (display_->IsMainMenuVisible()) {
                 display_->HideMainMenu();
                 RestoreCurrentView();
@@ -1702,26 +1881,76 @@ private:
             app.ToggleChatState();
         });
         boot_button_.OnLongPress([this]() {
+            if (screen_stream_->IsActive()) {
+                screen_stream_->RequestExit();
+                return;
+            }
+            if (screen_stream_->IsGameMenuVisible()) {
+                screen_stream_->HideGameMenu();
+                display_->ShowMainMenu();
+                return;
+            }
             SwitchToGameLauncher();
         });
         radio_button_.OnClick([this]() {
+            if (screen_stream_->IsActive())
+                return;
+            if (!radio_button_armed_.load()) {
+                ESP_LOGI(TAG, "Ignored radio click while startup input is guarded");
+                return;
+            }
             if (radio_enabled_.load())
                 StopRadio();
             else
                 StartRadio(radio_station_.load());
         });
         radio_button_.OnLongPress([this]() {
+            if (screen_stream_->IsActive())
+                return;
+            if (!radio_button_armed_.load()) {
+                ESP_LOGI(TAG, "Ignored radio long press while startup input is guarded");
+                return;
+            }
             StartRadio(radio_station_.load() + 1);
         });
         menu_button_.OnClick([this]() {
+            if (screen_stream_->IsActive())
+                return;
+            if (screen_stream_->IsGameMenuVisible()) {
+                screen_stream_->HideGameMenu();
+                display_->ShowMainMenu();
+                return;
+            }
             ToggleMainMenu();
         });
         joystick_button_.OnClick([this]() {
-            if (display_->IsMainMenuVisible())
+            if (screen_stream_->IsActive())
+                return;
+            if (screen_stream_->IsGameMenuVisible()) {
+                if (screen_stream_->GameMenuSelection() == 0)
+                    SwitchToGameLauncher();
+                else
+                    screen_stream_->RequestEnter();
+            } else if (display_->IsMainMenuVisible())
                 ActivateMainMenuItem();
             else
                 display_->ShowMainMenu();
         });
+
+        xTaskCreate([](void* arg) {
+            auto* board = static_cast<AtianS3Board*>(arg);
+            int released_samples = 0;
+            while (released_samples < 15) {
+                if (gpio_get_level(RADIO_BUTTON_GPIO) != 0)
+                    ++released_samples;
+                else
+                    released_samples = 0;
+                vTaskDelay(pdMS_TO_TICKS(20));
+            }
+            board->radio_button_armed_.store(true);
+            ESP_LOGI(TAG, "Radio button armed after stable release");
+            vTaskDelete(nullptr);
+        }, "radio_btn_guard", 2048, this, 3, nullptr);
     }
 
     void InitializeTools() {
@@ -1817,6 +2046,7 @@ public:
         tzset();
         InitializeSpi();
         InitializeLcdDisplay();
+        screen_stream_ = std::make_unique<screen_stream::ScreenStreamApp>(display_);
         InitializeRadio();
         InitializeSht30();
         InitializeJoystickMenu();

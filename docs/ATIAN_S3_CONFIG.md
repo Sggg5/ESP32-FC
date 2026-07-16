@@ -93,6 +93,20 @@ In the launcher, use the joystick to move, GPIO0 to confirm, GPIO4 for Start,
 GPIO47 for B/back, and GPIO3 for the emulator menu. An idle launcher or game
 returns to Xiaozhi after about five minutes.
 
+## PC screen streaming
+
+The Xiaozhi game page also contains `电脑串流`. It receives a 320x240 RGB332
+desktop, window, or region stream over UDP port 8888. Enter the item with the
+joystick, start `tools/pc_screen_streamer/start_gui.bat` on a Windows PC on the
+same LAN, and enter the IP shown on the device. Hold GPIO0 to stop streaming and
+return to the game page.
+
+Install the matching Xiaozhi modules with:
+
+```powershell
+.\xiaozhi-board\install-overlay.ps1 -XiaozhiPath C:\xiaozhi-esp32
+```
+
 ## Coexistence partition layout
 
 The board uses 16 MB flash. Do not use offsets from older `rom0` experiments.

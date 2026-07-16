@@ -1,0 +1,15 @@
+esp32:
+  ip: 192.168.1.100
+  port: 8888
+stream:
+  source_type: test
+  display_index: 1
+  window_title: 游戏窗口标题
+  region: null
+  width: 320
+  height: 240
+  fps: 15
+  color_mode: RGB332
+  fit_mode: fit
+  sharpen: 0.6
+  lines_per_packet: 4
